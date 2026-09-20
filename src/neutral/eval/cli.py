@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 
 from neutral.config import ConfigError, Settings, load_settings
-from neutral.eval.dataset import CATEGORIES, DatasetError, dataset_hash, load_dataset
+from neutral.eval.dataset import DatasetError, dataset_hash, load_dataset
 
 ROOT = Path(__file__).resolve().parent.parent.parent.parent
 DATASET_DIR = ROOT / "datasets" / "v1"
@@ -75,11 +75,14 @@ def doctor(args: argparse.Namespace) -> int:
 
     try:
         pairs = load_dataset(DATASET_DIR)
-        by_category = {c: sum(1 for p in pairs if p.category == c) for c in CATEGORIES}
         print(f"{TICK} Dataset: {len(pairs)} matched pairs, all valid")
-        for category, count in by_category.items():
-            marker = "   " if count else " ! "
-            print(f"      {marker}{category:24} {count:3d}")
+        for slice_name in sorted({p.slice_name for p in pairs}):
+            in_slice = [p for p in pairs if p.slice_name == slice_name]
+            label = "baseline" if slice_name == "hr" else "reported separately"
+            print(f"      {slice_name} ({len(in_slice)} pairs, {label})")
+            for category in sorted({p.category for p in in_slice}):
+                count = sum(1 for p in in_slice if p.category == category)
+                print(f"        {category:24} {count:3d}")
         print(f"{TICK} Dataset fingerprint: {dataset_hash(pairs)[:16]}")
     except DatasetError as exc:
         print(f"{CROSS} Dataset\n\n{exc}\n")

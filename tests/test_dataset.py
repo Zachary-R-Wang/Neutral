@@ -13,7 +13,7 @@ import pytest
 import yaml
 
 from neutral.eval.dataset import (
-    CATEGORIES,
+    HR_CATEGORIES,
     DatasetError,
     Pair,
     Variant,
@@ -91,6 +91,42 @@ class TestPairValidation:
         assert pair.differing_slots == ("NAME",)
 
 
+    def test_numbers_in_slot_values_are_accepted(self, tmp_path):
+        """`AGE: 24` is natural YAML to write, and parses as an integer."""
+        body = {
+            "pairs": [
+                {
+                    "id": "num-001",
+                    "category": "performance_review",
+                    "signal": "age",
+                    "template": "Review an employee aged {AGE}.",
+                    "a": {"label": "younger", "fills": {"AGE": 24}},
+                    "b": {"label": "older", "fills": {"AGE": 58}},
+                }
+            ]
+        }
+        (tmp_path / "ages.yaml").write_text(yaml.safe_dump(body))
+        pair = load_dataset(tmp_path)[0]
+        assert pair.render("a") == "Review an employee aged 24."
+
+    def test_a_list_as_a_slot_value_is_rejected(self, tmp_path):
+        body = {
+            "pairs": [
+                {
+                    "id": "bad-001",
+                    "category": "performance_review",
+                    "signal": "age",
+                    "template": "Review {NAME}.",
+                    "a": {"label": "x", "fills": {"NAME": ["Emily", "Carter"]}},
+                    "b": {"label": "y", "fills": {"NAME": "Ethan Carter"}},
+                }
+            ]
+        }
+        (tmp_path / "bad.yaml").write_text(yaml.safe_dump(body))
+        with pytest.raises(DatasetError, match="single piece of text"):
+            load_dataset(tmp_path)
+
+
 class TestMatchedness:
     """The property the experiment rests on."""
 
@@ -116,10 +152,26 @@ class TestDatasetLoading:
         pairs = load_dataset(DATASET_DIR)
         assert pairs, "the seed dataset is empty"
 
-    def test_every_category_is_represented(self):
+    def test_every_baseline_category_is_represented(self):
         present = {p.category for p in load_dataset(DATASET_DIR)}
-        missing = set(CATEGORIES) - present
+        missing = set(HR_CATEGORIES) - present
         assert not missing, f"no pairs for: {', '.join(sorted(missing))}"
+
+    def test_the_baseline_slice_has_the_sixty_pairs_claude_md_requires(self):
+        """CLAUDE.md section 5: a seed set of 60 pairs minimum across the five
+        HR categories."""
+        hr = [p for p in load_dataset(DATASET_DIR) if p.slice_name == "hr"]
+        assert len(hr) >= 60, (
+            f"the baseline slice has {len(hr)} pairs; CLAUDE.md requires at least 60"
+        )
+
+    def test_exploratory_pairs_are_kept_out_of_the_baseline(self):
+        for pair in load_dataset(DATASET_DIR):
+            if pair.slice_name != "hr":
+                assert pair.category not in HR_CATEGORIES, (
+                    f"{pair.id} is outside the baseline slice but uses a baseline "
+                    f"category, which would contaminate the headline number"
+                )
 
     def test_every_real_pair_is_matched(self):
         for pair in load_dataset(DATASET_DIR):

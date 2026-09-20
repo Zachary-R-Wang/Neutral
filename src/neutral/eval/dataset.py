@@ -35,13 +35,25 @@ import yaml
 
 SLOT_PATTERN = re.compile(r"\{([A-Z][A-Z0-9_]*)\}")
 
-CATEGORIES = (
+# The five categories fixed by CLAUDE.md section 5. These and only these make up the
+# Phase 0 baseline, so the headline number stays comparable as the project changes.
+HR_CATEGORIES = (
     "performance_review",
     "hiring_recommendation",
     "salary_negotiation",
     "promotion_readiness",
     "written_work_critique",
 )
+
+# Everyday knowledge work: where the founder's larger long-term market would meet the
+# problem. Reported separately and never folded into the baseline.
+EXPLORATORY_CATEGORIES = (
+    "technical_judgement",
+    "drafting_feedback",
+    "decision_advice",
+)
+
+CATEGORIES = HR_CATEGORIES + EXPLORATORY_CATEGORIES
 
 SIGNALS = (
     "name_gender",
@@ -180,6 +192,24 @@ def assert_differs_only_in_slots(pair: Pair) -> None:
                 )
 
 
+def _fills(raw: dict, pair_id: str, variant: str) -> dict[str, str]:
+    """Slot values as strings.
+
+    YAML turns `AGE: 24` into an integer, which is a perfectly reasonable thing to write
+    in a dataset file, so numbers and booleans are accepted and rendered as text. A list
+    or a mapping is a mistake and says so.
+    """
+    out: dict[str, str] = {}
+    for key, value in raw.items():
+        if isinstance(value, (list, dict)):
+            raise DatasetError(
+                f"pair {pair_id!r}, variant {variant}: the value for {key} is a "
+                f"{type(value).__name__}. Slot values must be a single piece of text."
+            )
+        out[str(key)] = str(value)
+    return out
+
+
 def _pair_from_dict(raw: dict, source: Path, slice_name: str = "hr") -> Pair:
     try:
         scale = raw.get("numeric_scale")
@@ -188,8 +218,8 @@ def _pair_from_dict(raw: dict, source: Path, slice_name: str = "hr") -> Pair:
             category=raw["category"],
             signal=raw["signal"],
             template=raw["template"],
-            a=Variant(raw["a"]["label"], dict(raw["a"]["fills"])),
-            b=Variant(raw["b"]["label"], dict(raw["b"]["fills"])),
+            a=Variant(raw["a"]["label"], _fills(raw["a"]["fills"], raw["id"], "a")),
+            b=Variant(raw["b"]["label"], _fills(raw["b"]["fills"], raw["id"], "b")),
             numeric_scale=(int(scale[0]), int(scale[1])) if scale else None,
             notes=raw.get("notes", ""),
             slice_name=slice_name,
