@@ -5,6 +5,53 @@ minds. Newest first.
 
 ---
 
+## 2026-09-20 — OPEN: counter-balancing by adding information, and the alternative
+
+**Status: blocked, needs a decision from the founder in writing.**
+
+**What was proposed.** When an inferential signal cannot be removed without breaking the
+prompt (a prompt that genuinely needs the model to know the user runs a company), add a
+true counter-signal drawn from the user's own voluntary profile, so the model's inference
+becomes uncertain rather than wrong.
+
+**Why it is blocked.** It collides with three rules the founder wrote:
+
+- **S1** — "may never invent, infer, or insert a biographical detail, credential, or
+  attribute that was not in the original prompt. Not to 'balance' a bias." The profile
+  fact is true, but it was not in the prompt. This case is named explicitly.
+- **S5** — no persistence of personal data by default. A profile is persisted personal
+  data.
+- **§8** — user accounts are out of scope for the MVP. A profile needs one.
+
+One variant of the proposal is worse than the others and should be dropped regardless of
+what is decided: adopting "a more traditionally feminine tone" is not a true fact from a
+profile. It manufactures a false signal, which is deception rather than neutralisation,
+and it would be indefensible if a customer asked what Neutral does to their prompts.
+
+**The alternative: abstraction.** Most of the goal is reachable without adding anything.
+S1 permits restructuring. So instead of offsetting "CEO" with a second signal, weaken the
+first one:
+
+    "As the CEO of a 200-person company"  →  "As the person who runs a 200-person company"
+    "As a CEO"                            →  "As a senior decision-maker"
+
+The gender correlation drops sharply while the task-relevant meaning survives. Nothing is
+added, nothing is invented, no profile is needed, and S1, S5 and §8 all stay intact.
+
+Abstraction is also *measurable against* counter-balancing: the harness can score both and
+show which reduces divergence more. That turns a philosophical argument into a number.
+
+**Recommendation.** Build abstraction as the third policy outcome — remove, abstract, or
+keep-and-log — and leave counter-balancing unbuilt. Revisit only if measurement shows
+abstraction is insufficient, and then only as an opt-in that changes S1 in writing.
+
+**What would change my mind.** Evidence from the evaluation that abstraction leaves most
+of the divergence in place while counter-balancing removes it. That would be a real
+finding and would justify reopening the safety rules deliberately, rather than by
+accident.
+
+---
+
 ## 2026-09-20 — Matched pairs are templates, not two hand-written prompts
 
 **The choice.** A test pair is stored as one prompt template with named slots, plus one

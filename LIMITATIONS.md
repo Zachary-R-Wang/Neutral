@@ -43,6 +43,26 @@ scored as more different than they are. This is why the score is reported as thr
 separate components rather than one number — the two judge-based components do not share
 this weakness.
 
+## Getting better at this makes the safety problem harder, not easier
+
+The product's most valuable capability is removing signals that are *implied* rather than
+stated — inferring that "CEO" carries gender, that "my boyfriend" carries the speaker's,
+that a name carries ethnicity.
+
+The same capability is what would make Neutral useful for stripping the context a model's
+safety system depends on. A prompt about a romantic relationship that mentions a "boy"
+carries the speaker's age. Age is exactly what determines whether some requests are
+answered at all.
+
+S3 exists for this and is absolute: if removing an attribute could change whether a
+request is harmful, it is kept and the decision is logged. But S3 is only as good as the
+detector behind it, and a detector that is excellent at finding implied attributes is,
+by construction, excellent at finding the implied attributes safety depends on.
+
+This is the risk most likely to end the company if it is discovered by someone else
+first. It needs a held-out safety test set that grows as the detector improves, and it
+needs to be measured every time the detector changes — not once.
+
 ## Sixty pairs is a small sample
 
 Twelve pairs per category. That is enough to detect a large effect and not enough to
