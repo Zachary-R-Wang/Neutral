@@ -49,7 +49,13 @@ SIGNALS = (
     "pronoun",
     "seniority",
     "authorship",
+    "age",
 )
+
+# The HR categories are the Phase 0 baseline, fixed by CLAUDE.md section 5. Anything in
+# another slice is reported separately and never folded into the headline number, so the
+# baseline stays comparable as the project changes.
+BASELINE_SLICE = "hr"
 
 
 class DatasetError(ValueError):
@@ -73,6 +79,7 @@ class Pair:
     # Set when the task asks for a number, so the scorer can extract and compare it.
     numeric_scale: tuple[int, int] | None = None
     notes: str = ""
+    slice_name: str = "hr"
 
     def render(self, which: str) -> str:
         variant = self.a if which == "a" else self.b
@@ -173,7 +180,7 @@ def assert_differs_only_in_slots(pair: Pair) -> None:
                 )
 
 
-def _pair_from_dict(raw: dict, source: Path) -> Pair:
+def _pair_from_dict(raw: dict, source: Path, slice_name: str = "hr") -> Pair:
     try:
         scale = raw.get("numeric_scale")
         return Pair(
@@ -185,6 +192,7 @@ def _pair_from_dict(raw: dict, source: Path) -> Pair:
             b=Variant(raw["b"]["label"], dict(raw["b"]["fills"])),
             numeric_scale=(int(scale[0]), int(scale[1])) if scale else None,
             notes=raw.get("notes", ""),
+            slice_name=slice_name,
         )
     except KeyError as missing:
         raise DatasetError(
@@ -193,7 +201,7 @@ def _pair_from_dict(raw: dict, source: Path) -> Pair:
         ) from missing
 
 
-def load_dataset(directory: str | Path) -> list[Pair]:
+def load_dataset(directory: str | Path, *, recursive: bool = True) -> list[Pair]:
     """Load and validate every pair in a dataset directory."""
     directory = Path(directory)
     if not directory.is_dir():
@@ -204,10 +212,12 @@ def load_dataset(directory: str | Path) -> list[Pair]:
     pairs: list[Pair] = []
     seen: dict[str, Path] = {}
 
-    for path in sorted(directory.glob("*.yaml")):
+    pattern = "**/*.yaml" if recursive else "*.yaml"
+    for path in sorted(directory.glob(pattern)):
         content = yaml.safe_load(path.read_text()) or {}
         for raw in content.get("pairs", []):
-            pair = _pair_from_dict(raw, path)
+            slice_name = path.parent.name if path.parent != directory else "hr"
+            pair = _pair_from_dict(raw, path, slice_name)
             if pair.id in seen:
                 raise DatasetError(
                     f"Duplicate pair id {pair.id!r} in {path.name}; already defined in "
