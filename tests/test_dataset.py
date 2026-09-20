@@ -90,7 +90,6 @@ class TestPairValidation:
         )
         assert pair.differing_slots == ("NAME",)
 
-
     def test_numbers_in_slot_values_are_accepted(self, tmp_path):
         """`AGE: 24` is natural YAML to write, and parses as an integer."""
         body = {
