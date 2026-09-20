@@ -92,10 +92,47 @@ class Pair:
     numeric_scale: tuple[int, int] | None = None
     notes: str = ""
     slice_name: str = "hr"
+    # Set when the material in the prompt contains a genuine, objective defect. Lets the
+    # scorer ask "was the bug caught?" instead of "was the tone different?", which is a
+    # finding nobody can dismiss as taste.
+    known_defect: str = ""
 
     def render(self, which: str) -> str:
         variant = self.a if which == "a" else self.b
         return _render(self.template, variant.fills)
+
+    def render_blinded(self) -> str:
+        """The prompt with every identity signal replaced by its slot name.
+
+        The judge sees this instead of either real variant, so it can tell what task was
+        set without ever learning whose it was. Only possible because a pair is a
+        template: the identity signal is already isolated in named slots.
+        """
+        blinded = dict(self.a.fills)
+        for slot in self.differing_slots:
+            blinded[slot] = f"[{slot}]"
+        return _render(self.template, blinded)
+
+    def redact_identity(self, text: str, which: str) -> str:
+        """Strip the identity signal out of a model's answer before it is judged.
+
+        An answer routinely repeats the name it was given. Without this the judge would
+        learn the identity from the answer even though the prompt was blinded.
+        """
+        variant = self.a if which == "a" else self.b
+        redacted = text
+        name_signal = self.signal in ("name_gender", "name_nationality")
+
+        for slot in self.differing_slots:
+            value = variant.fills[slot]
+            token = f"[{slot}]"
+            targets = [value]
+            if name_signal:
+                # "Emily Carter" is often shortened to "Emily" in the answer.
+                targets += [part for part in value.split() if len(part) >= 3]
+            for target in sorted(targets, key=len, reverse=True):
+                redacted = re.sub(rf"\b{re.escape(target)}\b", token, redacted, flags=re.IGNORECASE)
+        return redacted
 
     @property
     def differing_slots(self) -> tuple[str, ...]:
@@ -222,6 +259,7 @@ def _pair_from_dict(raw: dict, source: Path, slice_name: str = "hr") -> Pair:
             b=Variant(raw["b"]["label"], _fills(raw["b"]["fills"], raw["id"], "b")),
             numeric_scale=(int(scale[0]), int(scale[1])) if scale else None,
             notes=raw.get("notes", ""),
+            known_defect=raw.get("known_defect", ""),
             slice_name=slice_name,
         )
     except KeyError as missing:
@@ -280,6 +318,7 @@ def dataset_hash(pairs: list[Pair]) -> str:
                 "a": {"label": p.a.label, "fills": p.a.fills},
                 "b": {"label": p.b.label, "fills": p.b.fills},
                 "numeric_scale": list(p.numeric_scale) if p.numeric_scale else None,
+                "known_defect": p.known_defect,
             }
             for p in sorted(pairs, key=lambda p: p.id)
         ],

@@ -215,6 +215,24 @@ class TestDatasetHash:
         edited[0] = make_pair(id=pairs[0].id, template="Completely different {NAME}.")
         assert dataset_hash(pairs) != dataset_hash(edited)
 
+    def test_hash_covers_a_declared_defect(self):
+        """A declared defect changes what is being measured, so it changes the hash."""
+        pairs = load_dataset(DATASET_DIR)
+        altered = [
+            Pair(
+                id=p.id,
+                category=p.category,
+                signal=p.signal,
+                template=p.template,
+                a=p.a,
+                b=p.b,
+                numeric_scale=p.numeric_scale,
+                known_defect="something else entirely",
+            )
+            for p in pairs
+        ]
+        assert dataset_hash(pairs) != dataset_hash(altered)
+
     def test_hash_ignores_notes(self):
         """Notes are commentary; changing them must not invalidate a baseline."""
         pairs = load_dataset(DATASET_DIR)
@@ -227,6 +245,7 @@ class TestDatasetHash:
                 a=p.a,
                 b=p.b,
                 numeric_scale=p.numeric_scale,
+                known_defect=p.known_defect,
                 notes="a new note",
             )
             for p in pairs
