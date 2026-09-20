@@ -34,6 +34,8 @@ def _summary_dict(summary) -> dict:
         "dataset_hash": summary.dataset_hash,
         "rubric_version": summary.rubric_version,
         "slice": summary.slice_name,
+        "is_baseline": not summary.partial,
+        "pairs_available": summary.pairs_available,
         "pairs_total": len(summary.results),
         "pairs_usable": len(summary.usable()),
         "api_calls": summary.total_calls,
@@ -266,6 +268,7 @@ dl { display:grid; grid-template-columns:auto 1fr; gap:6px 18px; margin:0; font-
 dt { color:var(--ink-2); }
 dd { margin:0; font-variant-numeric:tabular-nums; }
 .warn { color:#d03b3b; font-weight:600; }
+.warnbanner { background:#d03b3b; color:#fff; }
 .empty { color:var(--muted); }
 @media (max-width:620px) { .hero { font-size:34px; } .wrap { padding:20px 16px 48px; } }
 """
@@ -287,6 +290,15 @@ def write_html(summary, path: Path) -> Path:
         rows_component,
     )
 
+    partial_note = ""
+    if summary.partial:
+        partial_note = (
+            f'<div class="banner warnbanner">Sample of {len(summary.results)} pairs, '
+            f"not the baseline. The baseline needs all {summary.pairs_available}. A "
+            f"sample this size cannot support a conclusion - treat these numbers as a "
+            f"demonstration of what the harness does, not as a result.</div>"
+        )
+
     failed_note = ""
     if summary.failures:
         share = summary.failures / max(1, summary.total_calls // 2) * 100
@@ -304,6 +316,7 @@ def write_html(summary, path: Path) -> Path:
 <style>{CSS}</style></head>
 <body><div class="wrap">
 <div class="banner">{escape(BANNER)}</div>
+{partial_note}
 
 <h1>Does the answer change with who is asking?</h1>
 <p class="sub">{escape(summary.subject_model)} &middot; {summary.runs_per_variant} runs per

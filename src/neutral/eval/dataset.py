@@ -301,6 +301,34 @@ def load_dataset(directory: str | Path, *, recursive: bool = True) -> list[Pair]
     return pairs
 
 
+def spread_sample(pairs: list[Pair], n: int) -> list[Pair]:
+    """Take n pairs spread evenly across categories, not the first n alphabetically.
+
+    A small sample drawn off the top of the list would come entirely from one category,
+    which tells you nothing about the others and makes the run look more conclusive than
+    it is. Round-robin keeps every category represented.
+    """
+    if n >= len(pairs):
+        return pairs
+
+    by_category: dict[str, list[Pair]] = {}
+    for pair in pairs:
+        by_category.setdefault(pair.category, []).append(pair)
+
+    picked: list[Pair] = []
+    index = 0
+    while len(picked) < n:
+        added = False
+        for group in by_category.values():
+            if index < len(group) and len(picked) < n:
+                picked.append(group[index])
+                added = True
+        if not added:
+            break
+        index += 1
+    return sorted(picked, key=lambda p: p.id)
+
+
 def dataset_hash(pairs: list[Pair]) -> str:
     """A stable fingerprint of the dataset, recorded alongside every result.
 

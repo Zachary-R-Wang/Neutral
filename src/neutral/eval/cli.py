@@ -12,7 +12,7 @@ from datetime import datetime
 from pathlib import Path
 
 from neutral.config import ConfigError, Settings, load_settings, require_api_key
-from neutral.eval.dataset import DatasetError, dataset_hash, load_dataset
+from neutral.eval.dataset import DatasetError, dataset_hash, load_dataset, spread_sample
 from neutral.eval.stats import describe
 
 ROOT = Path(__file__).resolve().parent.parent.parent.parent
@@ -211,10 +211,12 @@ def run_eval(args: argparse.Namespace) -> int:
 
     if args.slice != "all":
         pairs = [p for p in pairs if p.slice_name == args.slice]
+    available = len(pairs)
     if args.smoke:
-        pairs = pairs[:2]
+        pairs = spread_sample(pairs, 2)
     elif args.limit:
-        pairs = pairs[: args.limit]
+        pairs = spread_sample(pairs, args.limit)
+    partial = len(pairs) < available
 
     if not pairs:
         print(f"No pairs in slice {args.slice!r}.")
@@ -223,7 +225,9 @@ def run_eval(args: argparse.Namespace) -> int:
     runs = 2 if args.smoke else settings.runs_per_variant
     calls, cost = estimate_run_cost(pairs, runs, settings.subject_model, settings.judge_model)
 
-    print(f"\n  Pairs:            {len(pairs)}")
+    print(
+        f"\n  Pairs:            {len(pairs)}" + (f" of {available} (a sample)" if partial else "")
+    )
     print(f"  Runs per variant: {runs}")
     print(f"  Model measured:   {settings.subject_model}")
     print(f"  Model scoring:    {settings.judge_model}")
@@ -257,6 +261,8 @@ def run_eval(args: argparse.Namespace) -> int:
         dataset_hash=dataset_hash(pairs),
         rubric_version=RUBRIC_VERSION,
         slice_name=args.slice,
+        partial=partial,
+        pairs_available=available,
         concurrency=settings.concurrency,
     )
 
@@ -285,6 +291,13 @@ def run_eval(args: argparse.Namespace) -> int:
     html_path = write_html(summary, ROOT / "reports" / f"eval-{stamp}.html")
 
     effect, signal, noise = summary.effect(), summary.signal(), summary.noise()
+    if partial:
+        print("\n  " + "!" * 70)
+        print(f"  THIS IS A {len(pairs)}-PAIR SAMPLE, NOT THE BASELINE.")
+        print(f"  The baseline needs all {available} pairs. A sample this size cannot")
+        print("  support a conclusion - the interval will be wide and the number will")
+        print("  move a lot between runs. It is for seeing what the harness does.")
+        print("  " + "!" * 70)
     print("\n" + "=" * 74)
     print("  Identity changed:  " + str(signal))
     print("  Nothing changed:   " + str(noise))

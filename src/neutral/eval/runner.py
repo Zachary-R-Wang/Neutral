@@ -131,6 +131,10 @@ class RunSummary:
     failures: int
     refusals: int
     total_calls: int
+    # True when this ran on fewer than the full dataset slice. Such a run is for seeing
+    # what the harness does, never for a number anyone acts on.
+    partial: bool = False
+    pairs_available: int = 0
 
     def usable(self) -> list[PairResult]:
         return [r for r in self.results if r.usable]
@@ -233,6 +237,8 @@ def run_evaluation(
     dataset_hash: str,
     rubric_version: str,
     slice_name: str = "all",
+    partial: bool = False,
+    pairs_available: int = 0,
     concurrency: int = 8,
     transform: Transform = no_transform,
     progress: Callable[[str], None] = print,
@@ -292,4 +298,6 @@ def run_evaluation(
         failures=sum(1 for a in answers if a.error or a.judge_error),
         refusals=sum(1 for a in answers if a.refused),
         total_calls=len(answers) * 2,
+        partial=partial,
+        pairs_available=pairs_available or len(pairs),
     )
