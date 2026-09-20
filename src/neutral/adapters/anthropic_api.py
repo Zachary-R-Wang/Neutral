@@ -72,15 +72,27 @@ class AnthropicAdapter:
         max_tokens: int = 8000,
         effort: str = "high",
         thinking: bool = True,
-        timeout: float = 600.0,
+        timeout: float = 300.0,
         max_retries: int = 3,
     ) -> None:
         self.model = model
         self.max_tokens = max_tokens
         self.effort = effort
         self.thinking = thinking
+        # Granular timeouts, not one overall number. A single total timeout does not
+        # protect against the failure that actually happened here: the machine slept
+        # mid-run, every open socket died, and the client sat waiting on connections
+        # that would never answer - five hours for a job that takes twenty-five
+        # minutes, using two seconds of CPU the whole time.
+        #
+        # connect and pool are short because failing to reach the API is immediately
+        # obvious and worth retrying fast. read is generous because a model that is
+        # reasoning before it answers is legitimately slow, and cutting it off would
+        # throw away work already paid for.
         self._client = anthropic.Anthropic(
-            api_key=api_key, timeout=timeout, max_retries=max_retries
+            api_key=api_key,
+            timeout=anthropic.Timeout(timeout, connect=10.0, read=timeout, write=30.0, pool=10.0),
+            max_retries=max_retries,
         )
 
     def _request_kwargs(self) -> dict:
