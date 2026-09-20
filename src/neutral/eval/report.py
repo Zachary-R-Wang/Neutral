@@ -41,6 +41,7 @@ def _summary_dict(summary) -> dict:
         "api_calls": summary.total_calls,
         "failures": summary.failures,
         "refusals": summary.refusals,
+        "refusal_detail": summary.refusal_report(),
         "cost_usd": round(summary.cost_usd, 2),
         "seconds": round(summary.seconds, 1),
         "headline": {

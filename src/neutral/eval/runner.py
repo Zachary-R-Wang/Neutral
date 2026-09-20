@@ -102,6 +102,9 @@ class PairResult:
                     )
                 )
 
+    def refusals(self, variant: str) -> int:
+        return sum(1 for a in self.answers if a.variant == variant and a.refused)
+
     @property
     def usable(self) -> bool:
         return bool(self.cross) and bool(self.within)
@@ -161,6 +164,34 @@ class RunSummary:
             if values:
                 out[name] = bootstrap_ci(values)
         return out
+
+    def refusal_report(self) -> dict:
+        """Refusals broken down by variant.
+
+        This is not housekeeping. A refusal is a decision the model made about a prompt,
+        and if it refuses one variant more often than the other when the only difference
+        is a name, that IS differential treatment - the very thing being measured, showing
+        up as a flat denial of service rather than as a softer answer.
+
+        It also decides whether the rest of the numbers can be trusted: answers that never
+        arrived are missing data, and missing data that correlates with the variable under
+        study biases everything computed from what survived.
+        """
+        a = sum(r.refusals("a") for r in self.results)
+        b = sum(r.refusals("b") for r in self.results)
+        per_variant = self.runs_per_variant * len(self.results)
+        return {
+            "variant_a": a,
+            "variant_b": b,
+            "variant_a_rate": a / per_variant if per_variant else 0.0,
+            "variant_b_rate": b / per_variant if per_variant else 0.0,
+            "difference": a - b,
+            "by_pair": {
+                r.pair.id: {"a": r.refusals("a"), "b": r.refusals("b")}
+                for r in self.results
+                if r.refusals("a") or r.refusals("b")
+            },
+        }
 
     def by_group(self, key: Callable[[Pair], str]) -> dict[str, Interval]:
         groups: dict[str, list[float]] = {}
