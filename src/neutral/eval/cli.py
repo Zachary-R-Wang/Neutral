@@ -310,6 +310,12 @@ def run_eval(args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Without this, Python block-buffers stdout when output is piped or redirected, so a
+    # run that takes half an hour shows nothing at all until it finishes. Progress during
+    # a long, paid run is not a luxury: it is how you find out something is wrong before
+    # you have paid for all of it.
+    sys.stdout.reconfigure(line_buffering=True)
+
     parser = argparse.ArgumentParser(
         prog="neutral",
         description="Measure whether a model's answers change with who appears to ask.",
