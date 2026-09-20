@@ -1,0 +1,106 @@
+# Decisions
+
+Every non-obvious choice, in plain language, with the date and what would change our
+minds. Newest first.
+
+---
+
+## 2026-09-20 — Matched pairs are templates, not two hand-written prompts
+
+**The choice.** A test pair is stored as one prompt template with named slots, plus one
+set of slot values per variant. The two prompts are generated from the same characters.
+
+**Why.** The entire claim of this project is "these two prompts are identical except for
+who appears to be asking". If the two prompts are typed out separately, a stray comma, a
+different verb, or a dropped word silently turns the experiment into a measurement of
+wording. Nobody can spot that by reading, and a sceptical customer will assume it
+happened. With a shared template, everything outside the slots is identical by
+construction, and a test proves it.
+
+**Rejected.** Writing both prompts in full and eyeballing them. Cheaper to author, but it
+makes the central claim unverifiable, which is the one thing this project cannot afford.
+
+**What would change our minds.** Nothing likely. If a future pair genuinely cannot be
+expressed as one template, that pair should be dropped rather than the format weakened.
+
+---
+
+## 2026-09-20 — "Neutral adds nothing" is enforced by reconstruction, not inspection
+
+**The choice.** A rewritten prompt is not free text. It is an ordered list of *segments*,
+each of which must say where its characters came from: copied from a span of the
+original, substituted for a span of the original, or — only for Mechanism 4 — injected.
+The S1 check rebuilds the prompt from its segments and compares.
+
+**Why.** Safety invariant S1 says Neutral may never invent a detail about a real person.
+Checking that by reading the output, or by asking a model whether anything was added, is
+a judgement call that degrades over time. With segments, invented content has nowhere to
+come from: any character not traceable to the original fails the check automatically.
+
+**Consequence.** Mechanism 4 (comparison framing) is the one documented exception in
+CLAUDE.md §3, and it is the only mechanism allowed to produce an injected segment, only
+when the user has opted in. That rule now lives in the type system rather than in a
+comment.
+
+---
+
+## 2026-09-20 — The safety invariant tests fail on purpose, and `make test` explains that
+
+**The choice.** `tests/test_invariants.py` is written now, before the pipeline exists. It
+has two halves: tests of the enforcement machinery (25, all passing) and tests that the
+pipeline obeys the invariants (7, all failing). `make test` reports the two separately.
+
+**Why.** CLAUDE.md §9 forbids skipping these tests or marking them as expected failures.
+That is right, but it leaves a permanently red suite in which a real breakage would be
+invisible. The wrapper in `tools/run_tests.py` separates the two and tolerates the Phase 0
+failures **only while `neutral.pipeline.process` still raises NotImplementedError**. The
+moment the pipeline is built, those same failures become real failures and `make test`
+fails. Nothing is skipped, relaxed, or mocked; the reporting is what changed.
+
+---
+
+## 2026-09-20 — The model being measured is never the model doing the scoring
+
+**The choice.** `NEUTRAL_SUBJECT_MODEL` and `NEUTRAL_JUDGE_MODEL` must differ. The
+configuration refuses to load if they are the same.
+
+**Why.** CLAUDE.md §6 forbids letting the model that generates test cases also judge them.
+The same reasoning applies to grading: a model asked to score its own answers has a
+documented tendency to prefer them. Making this a hard configuration error means it
+cannot be lost in a future edit.
+
+---
+
+## 2026-09-20 — Randomness is measured, not controlled
+
+**The choice.** The harness does not set a temperature. Instead it runs every variant
+several times and measures how much the answers differ *from themselves*, then compares
+that against how much they differ across the identity change.
+
+**Why.** Two reasons, and the second only became clear on reading the current API
+documentation. First, a divergence number with no noise floor is uninterpretable: you
+cannot tell "the answer changed because of the name" from "the answer changes every time
+you ask". Second, the current Claude models reject the `temperature` parameter outright,
+so run-to-run variation cannot be dialled down even if we wanted to. Measuring the noise
+floor is therefore both the more honest design and the only available one.
+
+**Consequence.** The headline number is cross-variant divergence *minus* same-variant
+divergence, with a confidence interval. If that interval includes zero, the correct
+conclusion is "no detectable bias in this category", and that is what will be reported.
+
+---
+
+## 2026-09-20 — Python 3.12 via `uv`, and `src` on the path explicitly
+
+**The choice.** `uv` manages both the Python version and the dependencies. The `Makefile`
+puts `src` on the import path with `PYTHONPATH` rather than relying on an editable
+install.
+
+**Why.** The machine had only Python 3.9; CLAUDE.md requires 3.11 or newer. `uv` is named
+first in CLAUDE.md §4 and installs Python versions itself, so one tool solves both.
+
+The editable install silently failed to register on this machine — most likely because the
+project folder name contains a space. Rather than depend on a mechanism that had already
+broken once, the `Makefile` sets the path directly. It has no moving parts and cannot
+fail quietly. The package metadata in `pyproject.toml` is still correct for the day this
+becomes a real installed package.
