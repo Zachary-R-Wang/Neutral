@@ -5,6 +5,34 @@ minds. Newest first.
 
 ---
 
+## 2026-09-20 — The project lives outside iCloud, at ~/Developer/neutral
+
+**What happened.** Git stopped working mid-session: `.git/index` could not be read
+("Operation timed out"). The project was on the Desktop, which on this machine is synced
+by iCloud Drive, and the disk was 96% full. iCloud had evicted the file's contents to
+free space; when git tried to read it, the fetch timed out.
+
+**Why it matters.** The index is a rebuildable cache, so nothing was lost. But iCloud
+evicts files inside `.git` without knowing what they are, and the same thing happening to
+a stored object would mean losing committed work. Cloud sync and git repositories should
+not share a folder.
+
+**The fix.** The project moved from `~/Desktop/Neutral AI` to `~/Developer/neutral`, which
+iCloud does not sync. The working tree was backed up first and the commits were pushed to
+GitHub before anything moved, so there was a copy at every point.
+
+**A second problem it also fixed.** The editable install had silently failed at the old
+path, which is why the Makefile sets `PYTHONPATH` by hand. The cause was confirmed to be
+the space in "Neutral AI": at the new path the install works. The `PYTHONPATH` line stays
+anyway - it costs nothing and means the project still runs if the install ever breaks
+again.
+
+**Still outstanding.** The disk is at 96%. That is the founder's to deal with, but it will
+keep causing trouble - a full evaluation run writes reports, and the environment needs
+room to build.
+
+---
+
 ## 2026-09-20 — OPEN: counter-balancing by adding information, and the alternative
 
 **Status: blocked, needs a decision from the founder in writing.**
