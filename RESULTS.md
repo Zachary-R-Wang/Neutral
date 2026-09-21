@@ -47,6 +47,27 @@ The gap:            1.3   (95% CI  0.8 to  1.8, n=47)
 The tight interval is exactly the trap. A confidence interval is computed from the
 answers that arrived; it has no way to widen itself for the ones that never did.
 
+**A second defect, found while reading the partial numbers.** Nearly all of the
+measured effect sat in the `lexical` component (+4.7 of a +1.3 composite). That component
+was comparing the two answers *raw* - so an answer saying "Emily ... her ... Emily" was
+scored as differently worded from an identical one saying "Ethan ... his ... Ethan". Two
+word-for-word identical assessments measure 28 points apart on nothing but the name.
+
+The inflation lands entirely on the cross-variant side, because same-variant comparisons
+share a name - which is exactly where the reported effect lives. Fixed in rubric v2: the
+lexical component now compares answers with the identity redacted, the same redaction the
+judge already saw. Results scored under v1 are not comparable with v2.
+
+**What the surviving 47 pairs suggested, before the fix and with every caveat above.**
+The components that measure the model's actual judgement - how favourable it was, how
+strongly it recommended, what rating it gave - all had confidence intervals that included
+zero. The effect that was detected lived almost entirely in wording, and most of that
+wording difference has now turned out to be an artefact of our own substitution.
+
+This is a finding that points *against* the project's premise, on partial data, on one
+model. It is recorded here rather than waited out. A clean v2 run on all 60 pairs is what
+settles it.
+
 **What was fixed as a result.** The harness now refuses to present a run as a measurement
 when more than one answer in ten fails to score, or when any category loses more than
 half its pairs — with the reasons stated in the terminal and across the top of the HTML
