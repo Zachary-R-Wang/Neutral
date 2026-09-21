@@ -41,6 +41,15 @@ def no_transform(prompt: str) -> str:
     return prompt
 
 
+class OutOfCredit(RuntimeError):
+    """The account ran out of API credit mid-run.
+
+    Raised rather than recorded, because a run that continues past this point produces a
+    result that looks complete and is not: every call after the balance hits zero fails,
+    and whichever pairs happened to be last in the queue vanish from the output together.
+    """
+
+
 @dataclass
 class Answer:
     pair_id: str
@@ -165,6 +174,42 @@ class RunSummary:
                 out[name] = bootstrap_ci(values)
         return out
 
+    def validity(self) -> list[str]:
+        """Reasons this run cannot be treated as a measurement. Empty means it can.
+
+        A run that loses a fifth of its answers still prints a confident-looking number
+        with a tight confidence interval, because the interval only knows about the data
+        that arrived. It cannot see the data that did not. This check looks at what is
+        missing rather than at what is present.
+        """
+        problems: list[str] = []
+        answers = sum(len(r.answers) for r in self.results)
+        if answers and self.failures / answers > 0.10:
+            problems.append(
+                f"{self.failures} of {answers} answers ({self.failures / answers:.0%}) "
+                f"never produced a score. Above one in ten, what is missing can move the "
+                f"result more than what is present."
+            )
+
+        by_category: dict[str, list[bool]] = {}
+        for result in self.results:
+            by_category.setdefault(result.pair.category, []).append(result.usable)
+        for category, flags in sorted(by_category.items()):
+            if not any(flags):
+                problems.append(
+                    f"Every pair in '{category}' was lost, so this run says nothing about "
+                    f"that category at all."
+                )
+            elif sum(flags) / len(flags) < 0.5:
+                problems.append(
+                    f"Only {sum(flags)} of {len(flags)} pairs in '{category}' survived."
+                )
+        return problems
+
+    @property
+    def is_measurement(self) -> bool:
+        return not self.validity()
+
     def refusal_report(self) -> dict:
         """Refusals broken down by variant.
 
@@ -235,6 +280,8 @@ def _ask(adapter, pair: Pair, variant: str, run: int, transform: Transform) -> A
 
     if completion.error:
         answer.error = completion.error
+        if "credit balance" in completion.error.lower():
+            raise OutOfCredit(completion.error)
     elif completion.truncated:
         answer.error = "the answer hit the token limit and was cut off mid-sentence"
     return answer

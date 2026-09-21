@@ -34,7 +34,8 @@ def _summary_dict(summary) -> dict:
         "dataset_hash": summary.dataset_hash,
         "rubric_version": summary.rubric_version,
         "slice": summary.slice_name,
-        "is_baseline": not summary.partial,
+        "is_baseline": not summary.partial and summary.is_measurement,
+        "validity_problems": summary.validity(),
         "pairs_available": summary.pairs_available,
         "pairs_total": len(summary.results),
         "pairs_usable": len(summary.usable()),
@@ -316,6 +317,16 @@ def write_html(summary, path: Path) -> Path:
     refused_a = f"{ref['variant_a']} of {per_variant} ({ref['variant_a_rate']:.0%})"
     refused_b = f"{ref['variant_b']} of {per_variant} ({ref['variant_b_rate']:.0%})"
 
+    invalid_note = ""
+    if summary.validity():
+        items = "".join(f"<li>{escape(p)}</li>" for p in summary.validity())
+        invalid_note = (
+            '<div class="banner warnbanner">This run is not a valid measurement.'
+            f"<ul>{items}</ul>The numbers below show what happened. They are not a "
+            "result. A confidence interval only knows about the answers that arrived; "
+            "it cannot see the ones that did not.</div>"
+        )
+
     partial_note = ""
     if summary.partial:
         partial_note = (
@@ -342,6 +353,7 @@ def write_html(summary, path: Path) -> Path:
 <style>{CSS}</style></head>
 <body><div class="wrap">
 <div class="banner">{escape(BANNER)}</div>
+{invalid_note}
 {partial_note}
 
 <h1>Does the answer change with who is asking?</h1>

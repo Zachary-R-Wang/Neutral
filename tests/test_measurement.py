@@ -223,3 +223,94 @@ def test_reported_numbers_are_finite_and_ordered(bias):
     assert abs((signal.mean - noise.mean) - effect.mean) < 1e-6, (
         "the headline effect is not the gap between the two numbers behind it"
     )
+
+
+class TestAnIncompleteRunIsNotPresentedAsAResult:
+    """The protection that this project learned the hard way.
+
+    The first full baseline attempt ran out of API credit part-way through scoring. Every
+    call after that failed, and because the work was queued in order, the pairs that
+    happened to be last vanished together - all twelve written-work-critique pairs, the
+    entire sycophancy category. The run still printed a confident number with a tight
+    confidence interval, because an interval only knows about the answers that arrived.
+    """
+
+    def _summary_missing_a_whole_category(self):
+        pairs = [
+            Pair(
+                id=f"x-{n:03d}",
+                category="performance_review" if n < 6 else "written_work_critique",
+                signal="name_gender",
+                template="Assess {NAME}.",
+                a=Variant("a", {"NAME": "Alpha"}),
+                b=Variant("b", {"NAME": "Beta"}),
+            )
+            for n in range(12)
+        ]
+
+        class HalfBroken:
+            name, model = "half", "half"
+
+            def complete(self, prompt, *, system=None):
+                return Completion(text="rated 6 of 10", model="half", stop_reason="end_turn")
+
+        summary = run_evaluation(
+            pairs,
+            HalfBroken(),
+            ScriptedJudge(),
+            runs_per_variant=5,
+            dataset_hash="t",
+            rubric_version="t",
+            progress=lambda _: None,
+        )
+        # Simulate the credit running out: drop every answer for the later category.
+        for result in summary.results:
+            if result.pair.category == "written_work_critique":
+                for answer in result.answers:
+                    answer.verdict = None
+                    answer.judge_error = "credit balance too low"
+                result.cross.clear()
+                result.within.clear()
+        summary.failures = sum(1 for r in summary.results for a in r.answers if a.judge_error)
+        return summary
+
+    def test_losing_an_entire_category_invalidates_the_run(self):
+        summary = self._summary_missing_a_whole_category()
+        problems = summary.validity()
+        assert problems, "a run missing a whole category was reported as valid"
+        assert any("written_work_critique" in p for p in problems)
+        assert not summary.is_measurement
+
+    def test_a_high_failure_rate_invalidates_the_run(self):
+        summary = self._summary_missing_a_whole_category()
+        assert any("never produced a score" in p for p in summary.validity())
+
+    def test_a_clean_run_is_a_measurement(self):
+        summary = run(bias=1.0, noise=1.0)
+        assert summary.validity() == []
+        assert summary.is_measurement
+
+    def test_running_out_of_credit_stops_the_run_rather_than_truncating_it(self):
+        from neutral.eval.runner import OutOfCredit
+
+        class Broke:
+            name, model = "broke", "broke"
+
+            def complete(self, prompt, *, system=None):
+                return Completion(
+                    text="",
+                    model="broke",
+                    error="Your credit balance is too low to access the Anthropic API.",
+                )
+
+        with pytest.raises(OutOfCredit):
+            run_evaluation(
+                PAIRS[:2],
+                Broke(),
+                ScriptedJudge(),
+                runs_per_variant=5,
+                dataset_hash="t",
+                rubric_version="t",
+                concurrency=1,
+                progress=lambda _: None,
+            )

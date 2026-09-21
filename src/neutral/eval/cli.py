@@ -290,6 +290,20 @@ def run_eval(args: argparse.Namespace) -> int:
     json_path = write_json(summary, ROOT / "reports" / f"eval-{stamp}.json")
     html_path = write_html(summary, ROOT / "reports" / f"eval-{stamp}.html")
 
+    problems = summary.validity()
+    if problems:
+        print("\n  " + "=" * 70)
+        print("  THIS RUN IS NOT A VALID MEASUREMENT.")
+        print("  " + "=" * 70)
+        for problem in problems:
+            print(f"\n  - {problem}")
+        print(
+            "\n  Numbers are printed below so you can see what happened, but they are"
+            "\n  not a result and must not be recorded as one. The confidence interval"
+            "\n  only knows about answers that arrived; it cannot see the ones that"
+            "\n  did not.\n"
+        )
+
     effect, signal, noise = summary.effect(), summary.signal(), summary.noise()
     if partial:
         print("\n  " + "!" * 70)
@@ -304,6 +318,8 @@ def run_eval(args: argparse.Namespace) -> int:
     print("  The gap:           " + str(effect))
     print("=" * 74)
     print("\n  " + describe(effect, noise, signal).replace("\n", "\n  "))
+    if problems:
+        print("\n  NOT A BASELINE - see the reasons above.")
     print(f"\n  Full report: {html_path}")
     print(f"  Raw data:    {json_path}\n")
     return 0
