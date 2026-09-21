@@ -5,6 +5,48 @@ minds. Newest first.
 
 ---
 
+## 2026-09-20 — The model being measured is Sonnet 5, not Opus 5
+
+**What happened.** The first live run - 15 pairs, $5.20 - lost 45 of 150 answers to
+refusals. Opus 5 declined 30% of them with category `cyber`, on prompts like *"should
+this marketing manager ask for a pay rise?"* There is no cyber content anywhere in the
+dataset; the classifier was misfiring on ordinary HR material. Five of fifteen pairs were
+discarded entirely because too little survived to compare.
+
+**Why that is fatal to a baseline rather than merely annoying.** Missing data is harmless
+only when it is missing at random. A probe of the five worst-affected pairs found Opus 5
+refused 3 of 10 and Sonnet 5 refused 0 of 10 - and all three Opus refusals fell on
+variant A (the junior asker, the woman, the self-authored email), none on variant B.
+
+Three out of three is not evidence: three coin flips land the same way one time in eight.
+But it is precisely the pattern that would invalidate everything. If the model refuses
+one variant more often than the other, the answers that vanished are the ones where the
+difference lived, and every number computed from the survivors understates the effect.
+A baseline built on that cannot be compared against anything.
+
+**The decision.** The subject model becomes `claude-sonnet-5`; the judge becomes
+`claude-opus-5`. Checked first: all three current models judge without refusing, so only
+the subject role was affected.
+
+**What it costs and what it gains.** The full baseline drops from ~$24.53 to ~$16.62, and
+the whole project through Phase 4 from roughly $150 to roughly $100. The data is complete
+rather than 70% complete.
+
+**What is given up.** "Bias exists even in the most capable model" was the stronger
+headline. That is a real loss, and it can be recovered later by running the same dataset
+against Opus once the refusal behaviour is understood.
+
+**What would change our minds.** If Sonnet 5 turns out to refuse at a material rate on
+the full 60 pairs, or if its refusals are variant-correlated, the same reasoning applies
+again and the subject model changes again. The per-variant refusal tracking added in
+141db30 is what makes that checkable rather than assumed.
+
+**On the founder's suggestion to drop cybersecurity prompts.** There are none to drop.
+Every refused prompt was routine HR material - a pay rise, a promotion, a draft email.
+The trigger is not the subject matter.
+
+---
+
 ## 2026-09-20 — The project lives outside iCloud, at ~/Developer/neutral
 
 **What happened.** Git stopped working mid-session: `.git/index` could not be read

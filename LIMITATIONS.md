@@ -63,6 +63,23 @@ This is the risk most likely to end the company if it is discovered by someone e
 first. It needs a held-out safety test set that grows as the detector improves, and it
 needs to be measured every time the detector changes — not once.
 
+## Models refuse some of this dataset, and the refusals may not be random
+
+On the first live run, Claude Opus 5 refused 30% of the prompts - routine performance
+reviews, pay-rise questions, promotion assessments - classifying them as cyber content.
+The classification is wrong; there is no cyber content in the dataset. The refusals are
+also intermittent: the same prompt answers one minute and refuses the next.
+
+This matters beyond the inconvenience. A refused prompt is missing data, and a small
+probe found all three of Opus 5's refusals landing on the same variant of their pairs.
+Three cases prove nothing, but if that pattern held at scale it would mean the model
+expresses differential treatment partly as refusal rather than as a softer answer - and
+any divergence score computed from the answers that survived would understate the effect.
+
+The subject model moved to Sonnet 5, which refused nothing in the same probe. Refusals
+are now tracked per variant on every run, so this is measured rather than assumed. Any
+result on any model should be read alongside its refusal rate.
+
 ## Sixty pairs is a small sample
 
 Twelve pairs per category. That is enough to detect a large effect and not enough to
