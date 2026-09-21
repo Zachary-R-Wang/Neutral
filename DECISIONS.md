@@ -5,6 +5,50 @@ minds. Newest first.
 
 ---
 
+## 2026-09-20 — OPEN: rewriting a prompt can turn a refusal into an answer, and S3 does not cover it
+
+**Status: needs a decision from the founder in writing, before Phase 1 ships.**
+
+**What S3 says.** *"If the upstream model refuses a request, return that refusal verbatim.
+Never retry, never rephrase to get a different answer."*
+
+**The gap.** That covers rephrasing *after* a refusal. Neutral rewrites *before* the
+prompt is ever sent. If the rewritten prompt simply never triggers the refusal, the
+outcome is identical - a request that would have been declined gets answered - but no
+rule was broken as written.
+
+**This is not hypothetical.** Measured today: Opus 5 refused
+`"Sarah, a marketing manager, asks for your advice..."` and answered the identical prompt
+with `"Mark"`. Mechanism 1, the first thing Phase 1 builds, replaces `Sarah` with
+`Person A`. A prompt the model declined will now be answered.
+
+**Why it cannot simply be called a feature.** Today's refusals were false positives -
+routine HR questions misclassified as cyber content - so "unblocking" them looks like an
+improvement. But Neutral has no way to tell a false-positive refusal from a correct one.
+A layer that systematically converts refusals into answers is a jailbreak whatever its
+intent, and "our classifier thought the refusal was wrong" is not a defence anyone
+outside the company will accept.
+
+**The proposed rule, for the founder to accept or reject in writing:**
+
+> Neutral measures its own effect on refusal rate on every evaluation run. A fall in
+> refusals is treated as a warning, not a win: it is reported in the same place as the
+> divergence number and requires case-by-case review of which prompts changed status.
+> Neutral never optimises for fewer refusals, and no mechanism may be tuned, selected or
+> ranked on that basis.
+
+**Built so far.** Refusals are recorded per variant on every run and shown as a headline
+section of the report, not a footnote, with a warning when the rate is material or the
+two variants differ. The cross-run comparison - baseline refusal rate against
+Neutral-in-the-path refusal rate - lands with Phase 1, because that is the first run
+where there is something to compare.
+
+**What would change my mind.** Nothing about the measurement; it should exist either way.
+The open question is only what Neutral does when the number moves - and that is a
+decision about what the company is willing to claim, not an engineering one.
+
+---
+
 ## 2026-09-20 — The model being measured is Sonnet 5, not Opus 5
 
 **What happened.** The first live run - 15 pairs, $5.20 - lost 45 of 150 answers to

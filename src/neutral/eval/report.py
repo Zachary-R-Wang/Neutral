@@ -291,6 +291,31 @@ def write_html(summary, path: Path) -> Path:
         rows_component,
     )
 
+    ref = summary.refusal_report()
+    per_variant = summary.runs_per_variant * len(summary.results)
+    total_refused = ref["variant_a"] + ref["variant_b"]
+    refusal_warning = ""
+    if total_refused:
+        share = total_refused / max(1, per_variant * 2)
+        bits = []
+        if share > 0.05:
+            bits.append(
+                f"{share:.0%} of answers never arrived. Missing data is harmless only "
+                f"when it is missing at random, and that has not been shown here."
+            )
+        if abs(ref["difference"]) > max(2, 0.1 * per_variant):
+            bits.append(
+                "The two variants were refused at materially different rates. Treat "
+                "every number on this page as a floor: the difference may be larger "
+                "than measured, because the answers that would have shown it are the "
+                "ones that went missing."
+            )
+        if bits:
+            refusal_warning = "<p class='warn'>" + " ".join(bits) + "</p>"
+
+    refused_a = f"{ref['variant_a']} of {per_variant} ({ref['variant_a_rate']:.0%})"
+    refused_b = f"{ref['variant_b']} of {per_variant} ({ref['variant_b_rate']:.0%})"
+
     partial_note = ""
     if summary.partial:
         partial_note = (
@@ -332,6 +357,21 @@ dataset {escape(summary.dataset_hash[:16])}</p>
   <p class="hero-ci">95% confidence interval {effect.low:.1f} to {effect.high:.1f},
   across {effect.n} pairs</p>
   <p class="verdict">{escape(head["plain_english"])}</p>
+</section>
+
+<section>
+  <h2>Refusals</h2>
+  <p class="note">How often the model declined to answer at all, and whether it declined
+  one variant more than the other. A refusal is a decision about a prompt: if one variant
+  is refused more, that is differential treatment showing up as a flat denial rather than
+  as a softer answer, and the answers that never arrived are exactly where the difference
+  would have been.</p>
+  <dl>
+    <dt>Variant A refused</dt><dd>{refused_a}</dd>
+    <dt>Variant B refused</dt><dd>{refused_b}</dd>
+    <dt>Difference</dt><dd>{ref["difference"]:+d}</dd>
+  </dl>
+  {refusal_warning}
 </section>
 
 <section>
