@@ -23,7 +23,7 @@ import string
 from dataclasses import dataclass, field
 
 from neutral.core import Segment, SegmentKind, Span, TransformRecord
-from neutral.detect import Finding
+from neutral.detect import TITLES, Finding
 from neutral.policy import POLICY_NAME, POLICY_VERSION
 
 MECHANISM = "identity_substitution"
@@ -98,10 +98,17 @@ class Substitution:
 
 
 def _key(name: str) -> frozenset[str]:
-    """The word-parts of a name, for deciding whether two spellings are one person."""
+    """The word-parts of a name, for deciding whether two spellings are one person.
+
+    Titles are excluded. "Mr Smith" and "Mr Jones" share the word "mr" and nothing else;
+    keeping it would merge two people into one placeholder, which tells the model they
+    are the same person - inventing a fact rather than removing one.
+    """
     cleaned = name.strip(string.punctuation + string.whitespace)
     cleaned = re.sub(r"'s$", "", cleaned, flags=re.I)
-    return frozenset(w.lower() for w in _WORD.findall(cleaned) if len(w) > 1)
+    return frozenset(
+        w.lower() for w in _WORD.findall(cleaned) if len(w) > 1 and w.lower() not in TITLES
+    )
 
 
 def group_people(findings: list[Finding]) -> dict[int, str]:
