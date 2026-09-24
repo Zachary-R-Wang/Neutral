@@ -118,6 +118,9 @@ class NeutralResult:
     # we therefore sent the original prompt unmodified.
     passthrough: bool = False
     passthrough_reason: str | None = None
+    # One of neutral.errors when a provider failed. The interface renders from this,
+    # never from passthrough_reason, which may carry a provider's own wording.
+    error_kind: str = ""
 
     # S3 - true when the upstream model refused. The refusal is returned verbatim and is
     # never retried, rephrased or split up.

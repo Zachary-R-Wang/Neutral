@@ -19,6 +19,7 @@ rather than by care:
 
 from __future__ import annotations
 
+from neutral import errors
 from neutral.core import NeutralResult, Segment, SegmentKind, Span
 from neutral.detect import detect_names, detect_names_offline, find_pronouns
 from neutral.invariants import InvariantViolation, verify_no_added_information
@@ -45,6 +46,10 @@ def _refused(completion) -> bool:
 
 def _error(completion) -> str | None:
     return None if isinstance(completion, str) else getattr(completion, "error", None)
+
+
+def _error_kind(completion) -> str:
+    return "" if isinstance(completion, str) else getattr(completion, "error_kind", "")
 
 
 def _passthrough(
@@ -78,10 +83,20 @@ def process(
     try:
         original = adapter.complete(prompt)
     except Exception as exc:  # noqa: BLE001 - any failure must fail open, not propagate
-        return _passthrough(prompt, "", f"the model could not be reached: {exc}")
+        return _passthrough(
+            prompt,
+            "",
+            f"the model could not be reached: {exc}",
+            error_kind=errors.UNREACHABLE,
+        )
 
     if _error(original):
-        return _passthrough(prompt, "", f"the model returned an error: {_error(original)}")
+        return _passthrough(
+            prompt,
+            "",
+            f"the model returned an error: {_error(original)}",
+            error_kind=_error_kind(original) or errors.BAD_REQUEST,
+        )
 
     original_text = _text_of(original)
 

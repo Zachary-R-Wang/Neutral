@@ -25,7 +25,12 @@ class Completion:
     input_tokens: int = 0
     output_tokens: int = 0
     # Set when the call failed. The caller decides what to do; it never crashes a run.
+    # `error` is the provider's own wording, for logs and diagnostics. `error_kind` is
+    # one of neutral.errors, and is the ONLY thing a user-facing surface may render -
+    # a provider's text names their company and their billing page, which is wrong to
+    # show someone who connected a different model entirely.
     error: str | None = None
+    error_kind: str = ""
     # True when the answer hit the token ceiling and was cut off mid-thought. Such an
     # answer must not be scored as if it were complete.
     truncated: bool = False

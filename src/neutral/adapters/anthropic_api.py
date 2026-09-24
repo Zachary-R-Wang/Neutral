@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import anthropic
 
+from neutral import errors
 from neutral.adapters.base import Completion
 
 # US dollars per million tokens. Used only to estimate what a run will cost before it is
@@ -57,6 +58,21 @@ def estimate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
         return 0.0
     in_rate, out_rate = PRICING[model]
     return (input_tokens / 1_000_000) * in_rate + (output_tokens / 1_000_000) * out_rate
+
+
+def _classify(exc) -> str:
+    """Map this provider's failure onto the provider-neutral list in neutral.errors."""
+    raw = (getattr(exc, "message", "") or str(exc)).lower()
+    status = getattr(exc, "status_code", 0)
+    if "credit balance" in raw or "billing" in raw:
+        return errors.NO_CREDIT
+    if status == 429 or "rate limit" in raw:
+        return errors.RATE_LIMITED
+    if status in (401, 403):
+        return errors.AUTH
+    if status >= 500:
+        return errors.SERVER_ERROR
+    return errors.BAD_REQUEST
 
 
 def _plain_english(exc) -> str:
@@ -146,6 +162,7 @@ class AnthropicAdapter:
             return Completion(
                 text="",
                 model=self.model,
+                error_kind=errors.AUTH,
                 error=(
                     "The Anthropic API rejected your key. Check ANTHROPIC_API_KEY in "
                     ".env, and that the key has not been revoked."
@@ -155,6 +172,7 @@ class AnthropicAdapter:
             return Completion(
                 text="",
                 model=self.model,
+                error_kind=errors.BAD_REQUEST,
                 error=(
                     f"The model {self.model!r} does not exist or is not available to "
                     f"your account. Check NEUTRAL_SUBJECT_MODEL and NEUTRAL_JUDGE_MODEL "
@@ -165,6 +183,7 @@ class AnthropicAdapter:
             return Completion(
                 text="",
                 model=self.model,
+                error_kind=errors.RATE_LIMITED,
                 error=(
                     "Rate limited by the API after several retries. Lower "
                     "NEUTRAL_CONCURRENCY in .env and run it again."
@@ -174,10 +193,16 @@ class AnthropicAdapter:
             return Completion(
                 text="",
                 model=self.model,
+                error_kind=errors.UNREACHABLE,
                 error="Could not reach the Anthropic API. Check your internet connection.",
             )
         except anthropic.APIStatusError as exc:
-            return Completion(text="", model=self.model, error=_plain_english(exc))
+            return Completion(
+                text="",
+                model=self.model,
+                error_kind=_classify(exc),
+                error=_plain_english(exc),
+            )
 
         return self._to_completion(response)
 
