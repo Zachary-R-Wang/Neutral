@@ -362,7 +362,8 @@ def page(conversation: Conversation | None = None, *, error: str = "") -> str:
         greeting = escape(random.choice(ANYTIME_GREETINGS))
         body = f"""<div class="opening">
   <h2 id="greeting">{greeting}</h2>
-  <p>Neutral removes signals about who is asking before your prompt reaches the model.</p>
+  <p>Neutral removes signals that can introduce bias or indicate your identity
+  before your prompt reaches the model.</p>
   {_composer(opening=True)}
 </div>\n<script>{GREETING_JS}</script>"""
 
