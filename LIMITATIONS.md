@@ -80,25 +80,26 @@ The subject model moved to Sonnet 5, which refused nothing in the same probe. Re
 are now tracked per variant on every run, so this is measured rather than assumed. Any
 result on any model should be read alongside its refusal rate.
 
-## Restoration converts pronouns that were never about a person
+## Restoration resolves pronouns by recency, which is a heuristic
 
-Seen in a real answer, not in a test. The model wrote, of a delayed project, that blockers
-should be surfaced early - "surfacing them in week one gives the team options". Restoration
-turned "them" into "her", because the request had one substituted person and every neutral
-pronoun was assumed to refer to her. The result reads "surfacing her in one week", which
-is not what the model said and not what the reader wants.
+A neutral pronoun in a model's answer might be about the person or about something else
+entirely. Restoration decides by recency - a pronoun refers to the most recently
+mentioned thing it could refer to - so it converts only when the person was mentioned
+more recently than any plural noun.
 
-"They", "them" and "their" are used for things as often as for people. Telling the two
-apart is coreference resolution - working out what a pronoun points at - and nothing in
-Phase 1 does it. The current rule converts every neutral pronoun when exactly one person
-was substituted, which is right most of the time and visibly wrong the rest of the time.
+That fixes the case that exposed the problem: "if blockers or scope creep emerge,
+surfacing them in week one" keeps "them", because "blockers" sits between the person and
+the pronoun.
 
-Two things limit the damage. Pronouns are left alone entirely when two or more people were
-substituted, because there the guess would be worse. And the unmodified answer is always
-one click below, so a reader who hits a strange sentence can see what was actually said.
+It is a rule of thumb, not comprehension, and it will get some sentences wrong -
+particularly ones where the antecedent is singular and not a person ("the project ... it
+... they"), or where the reference reaches back further than the last plural noun. Proper
+coreference resolution is a different class of tool and a heavier dependency.
 
-This is Phase 3's problem - restoration quality - and it is the clearest argument for why
-that phase exists.
+Two things limit the damage. Pronouns are left entirely alone when two or more people
+were substituted, because there the guess would be worse than no guess. And the
+unmodified answer is always one click below, so a reader who hits a strange sentence can
+see what was actually said.
 
 ## Sixty pairs is a small sample
 

@@ -98,3 +98,54 @@ class TestCapitalisationSurvives:
     def test_a_mid_sentence_pronoun_stays_lower_case(self):
         assert "that they" not in back("I think that they led it.")
         assert "that she led it" in back("I think that they led it.")
+
+
+class TestOnlyThePersonsPronounsAreConverted:
+    """Found in a live answer, not in a test.
+
+    The model wrote "if blockers or scope creep emerge, surfacing them in week one".
+    "Them" meant the blockers. Converting every neutral pronoun turned it into "surfacing
+    her in one week", which is not what the model said.
+
+    The rule is recency - a pronoun refers to the most recently mentioned thing it could
+    refer to - so a pronoun is only converted when the person was mentioned more recently
+    than any plural noun.
+    """
+
+    def test_a_pronoun_about_things_is_left_alone(self):
+        out = back(
+            "Work on flagging risks earlier - if blockers or scope creep emerge, "
+            "surfacing them in week one gives the team options."
+        )
+        assert "surfacing them" in out
+        assert "surfacing her" not in out
+
+    def test_a_pronoun_about_the_person_is_still_converted(self):
+        assert "her estimates" in back("Person A should tighten their estimates.")
+
+    def test_the_person_carries_across_sentences(self):
+        out = back("Person A missed a deadline. They should improve their planning.")
+        assert "She should improve her planning" in out
+
+    def test_a_nearer_plural_wins(self):
+        out = back("Person A owns the service. The other teams rely on it; they escalate.")
+        assert "they escalate" in out
+
+    def test_with_nothing_else_mentioned_the_person_is_assumed(self):
+        """The answer is about them; a plural has to actually appear to take precedence."""
+        assert back("They are strong on delivery.") == "She is strong on delivery."
+
+    def test_agreement_still_follows_the_conversion(self):
+        out = back("Person A is ready. They have shipped twice and they do not hesitate.")
+        assert "She has shipped" in out
+        assert "she does not hesitate" in out
+
+
+def test_the_language_model_is_installed_so_detection_does_not_degrade_silently():
+    """It was pruned once by a dependency sync and nothing failed - it just got worse."""
+    from neutral.detect import _model
+
+    assert _model() is not None, (
+        "the local language model is missing, so name detection and pronoun resolution "
+        "have silently fallen back to rules. Run `make dev` to reinstall it."
+    )

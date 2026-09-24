@@ -85,6 +85,103 @@ def _match_case(original: str, replacement: str) -> str:
     return replacement.capitalize() if original[:1].isupper() else replacement
 
 
+# --------------------------------------------------------------------------------------
+# Working out which pronouns are about the person
+# --------------------------------------------------------------------------------------
+
+# The contraction suffixes are here because a tokeniser splits "they're" into
+# "they" and "'re". Converting only the pronoun leaves "She're".
+_SINGULARISE = {
+    "are": "is",
+    "were": "was",
+    "have": "has",
+    "do": "does",
+    "'re": "'s",
+    "'ve": "'s",
+    "aren't": "isn't",
+    "weren't": "wasn't",
+    "haven't": "hasn't",
+    "don't": "doesn't",
+}
+
+
+def _match_case_word(original: str, replacement: str) -> str:
+    return replacement.capitalize() if original[:1].isupper() else replacement
+
+
+def _placeholder_spans(text: str, placeholders: list[str]) -> list[tuple[int, int]]:
+    spans = []
+    for placeholder in placeholders:
+        for match in re.finditer(rf"\b{re.escape(placeholder)}\b", text):
+            spans.append((match.start(), match.end()))
+    return spans
+
+
+def _convert_by_recency(text: str, placeholders: list[str], table: dict[str, str]) -> str | None:
+    """Convert only the neutral pronouns that are about the person.
+
+    The rule is recency, which is the oldest and most reliable heuristic for this: a
+    pronoun refers to the most recently mentioned thing it could refer to. So each
+    "they", "them" or "their" is converted only when the person was mentioned more
+    recently than any plural noun.
+
+    This is what fixes the sentence that started it: "if blockers or scope creep emerge,
+    surfacing them in week one". "Blockers" sits between the person and the pronoun, so
+    "them" is left alone instead of becoming "her".
+
+    It is a heuristic, not comprehension. Returns None if the local model is unavailable,
+    and the caller falls back to converting everything.
+    """
+    from neutral.detect import _model
+
+    nlp = _model()
+    if nlp is None:
+        return None
+
+    doc = nlp(text)
+    person_spans = _placeholder_spans(text, placeholders)
+
+    def is_person(token) -> bool:
+        start, end = token.idx, token.idx + len(token.text)
+        return any(s <= start and end <= e for s, e in person_spans)
+
+    words = [token.text for token in doc]
+    last_person = -1
+    last_plural = -1
+    converted: set[int] = set()
+
+    for index, token in enumerate(doc):
+        low = token.text.lower()
+
+        if is_person(token):
+            last_person = index
+            continue
+        if token.tag_ in ("NNS", "NNPS"):
+            last_plural = index
+            continue
+
+        # >= not >: when neither has been mentioned yet, both are -1, and the person
+        # is who the answer is about. A plural noun has to actually appear to win.
+        if low not in FEMININE or last_person < last_plural:
+            continue
+
+        words[index] = _match_case_word(token.text, table[low])
+        converted.add(index)
+
+        # The verb follows the pronoun back to the singular: "they are" becomes "she is",
+        # and the inverted "are they" needs the word before instead.
+        if low != "they":
+            continue
+        after = doc[index + 1].text.lower() if index + 1 < len(doc) else ""
+        before = doc[index - 1].text.lower() if index else ""
+        if after in _SINGULARISE and index + 1 not in converted:
+            words[index + 1] = _match_case_word(doc[index + 1].text, _SINGULARISE[after])
+        elif before in _SINGULARISE and index - 1 not in converted:
+            words[index - 1] = _match_case_word(doc[index - 1].text, _SINGULARISE[before])
+
+    return "".join(w + doc[i].whitespace_ for i, w in enumerate(words))
+
+
 def restore(
     text: str,
     identity_map: dict[str, str],
@@ -99,14 +196,26 @@ def restore(
         restored = re.sub(rf"\b{re.escape(placeholder)}\b", real.replace("\\", ""), restored)
 
     style = (pronoun_style or {}).get("*")
-    # Only one substituted person means every neutral pronoun refers to them. With more
-    # than one there is no way to tell, so they are left alone.
+    # With two or more substituted people there is no way to tell who a pronoun means, and
+    # an answer that confidently discusses the wrong person is the worst outcome here.
     if style and len(identity_map) <= 1:
         table = FEMININE if style == "feminine" else MASCULINE
-        # Agreement first, while the verb is still beside the pronoun it belongs to.
-        restored = _fix_agreement(restored, table["they"])
-        restored = _NEUTRAL.sub(
-            lambda m: _match_case(m.group(0), table[m.group(0).lower()]), restored
-        )
+        by_recency = _convert_by_recency(text, list(identity_map), table)
+        if by_recency is not None:
+            # Names are put back afterwards, so the placeholders were still visible to the
+            # recency check above.
+            restored = by_recency
+            for placeholder in sorted(identity_map, key=len, reverse=True):
+                restored = re.sub(
+                    rf"\b{re.escape(placeholder)}\b",
+                    identity_map[placeholder].replace("\\", ""),
+                    restored,
+                )
+        else:
+            # No local model: convert everything, which is right more often than not.
+            restored = _fix_agreement(restored, table["they"])
+            restored = _NEUTRAL.sub(
+                lambda m: _match_case(m.group(0), table[m.group(0).lower()]), restored
+            )
 
     return restored
