@@ -93,6 +93,7 @@ font-size:15px;resize:none;outline:none;max-height:180px;min-height:26px;padding
 button{background:var(--accent);color:#fff;border:0;border-radius:10px;
 padding:9px 17px;font:inherit;font-weight:600;cursor:pointer;white-space:nowrap}
 button:hover{filter:brightness(1.08)}
+button:disabled{opacity:.55;cursor:default}
 button.ghost{background:transparent;color:var(--muted);border:1px solid var(--line);
 font-weight:500;font-size:12px;padding:4px 11px;border-radius:999px}
 button.ghost:hover{color:var(--ink2);filter:none}
@@ -147,6 +148,31 @@ def _turn(turn: Turn) -> str:
     return "".join(parts)
 
 
+# The only script on the page. Enter sends, Shift-Enter makes a new line, and the box
+# grows with what is typed - the three things a person expects from a message box, none
+# of which a plain <textarea> does by itself. The page still works without it: the form
+# posts normally and the button always submits.
+COMPOSER_JS = """
+(function(){
+  var f=document.querySelector('form.composer'); if(!f) return;
+  var t=f.querySelector('textarea');
+  function grow(){ t.style.height='auto'; t.style.height=Math.min(t.scrollHeight,180)+'px'; }
+  t.addEventListener('input',grow); grow();
+  t.addEventListener('keydown',function(e){
+    if(e.key==='Enter' && !e.shiftKey && !e.isComposing){
+      e.preventDefault();
+      if(t.value.trim()) f.requestSubmit();
+    }
+  });
+  f.addEventListener('submit',function(){
+    var b=f.querySelector('button[type=submit]');
+    if(b){ b.disabled=true; b.textContent='Sending...'; }
+  });
+  t.focus();
+})();
+"""
+
+
 def _composer(*, opening: bool) -> str:
     label = "Start" if opening else "Send"
     return f"""<form class="composer" method="post" action="/">
@@ -155,9 +181,8 @@ def _composer(*, opening: bool) -> str:
       placeholder="{escape(PLACEHOLDER) if opening else "Reply..."}"></textarea>
     <button type="submit">{label}</button>
   </div>
-  <p class="hint">Nothing is saved. Names are held in memory for one request, then
-  discarded. Each reply is shown with the identity put back; the original is one click
-  away.</p>
+  <p class="hint">Enter to send, Shift-Enter for a new line. Nothing is saved. Names are
+  held in memory for one request, then discarded.</p>
 </form>"""
 
 
@@ -192,5 +217,5 @@ def page(conversation: Conversation | None = None, *, error: str = "") -> str:
 <span>identity removed before the model sees it</span>{reset}</div>
 {banner_error}
 {body}
-</div></body></html>
+</div><script>{COMPOSER_JS}</script></body></html>
 """
