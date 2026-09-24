@@ -24,11 +24,7 @@ from html import escape
 from neutral.conversation import Conversation, Turn
 from neutral.invariants import BANNER
 
-PLACEHOLDER = (
-    "Ask anything. For example: Write the areas-for-development section of Emily "
-    "Carter's performance review. She shipped the refund API redesign but missed the "
-    "reconciliation deadline by three weeks."
-)
+PLACEHOLDER = "Ask anything!"
 
 CSS = """
 /* Values taken from vercel.com and its Geist design system, read off the live site
