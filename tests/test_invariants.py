@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import pytest
 
+from neutral.adapters.base import Completion
 from neutral.core import (
     COMPARISON_FRAMING,
     NeutralResult,
@@ -29,6 +30,7 @@ from neutral.core import (
     Span,
     TransformRecord,
 )
+from neutral.detect import DetectedSpan, Detection
 from neutral.invariants import (
     BANNER,
     InvariantViolation,
@@ -311,15 +313,38 @@ class TestS7EnforcementWorks:
 
 
 class _RecordingAdapter:
-    """A stand-in model that returns a fixed answer and records what it was sent."""
+    """A stand-in model.
 
-    def __init__(self, reply: str = "Here is the review.") -> None:
+    This was a bare stub when these tests were written, before the adapter interface
+    existed - it returned a plain string and had no way to signal a refusal or to run
+    detection. It now matches the real interface. None of the assertions below changed.
+    """
+
+    name = "recording"
+    model = "recording-1"
+
+    def __init__(self, reply: str = "Here is the review.", *, refuse: bool = False) -> None:
         self.reply = reply
+        self.refuse = refuse
         self.prompts_seen: list[str] = []
 
-    def complete(self, prompt: str) -> str:
+    def complete(self, prompt: str, *, system: str | None = None) -> Completion:
         self.prompts_seen.append(prompt)
-        return self.reply
+        return Completion(
+            text=self.reply,
+            model=self.model,
+            refused=self.refuse,
+            stop_reason="refusal" if self.refuse else "end_turn",
+        )
+
+    def parse(self, prompt: str, output_format, *, system: str | None = None):
+        """Stand in for the name detector. Finds the names this dataset actually uses."""
+        found = [
+            DetectedSpan(text=name, kind="person_name")
+            for name in ("Priya Raman", "Emily Carter", "Ethan Carter")
+            if name in prompt
+        ]
+        return Detection(spans=found), Completion(text="", model=self.model)
 
 
 def _run(prompt: str = ORIGINAL, **kwargs) -> NeutralResult:
@@ -344,14 +369,16 @@ class TestPipelineSatisfiesInvariants:
 
     def test_s3_pipeline_returns_refusals_verbatim(self):
         refusal = "I can't help with that."
-        adapter = _RecordingAdapter(reply=refusal)
+        adapter = _RecordingAdapter(reply=refusal, refuse=True)
         result = process(ORIGINAL, adapter=adapter)
         verify_refusal_returned_verbatim(refusal, result.processed_response)
         assert result.refused is True
 
     def test_s4_pipeline_fails_open_to_the_original(self):
         class BrokenAdapter:
-            def complete(self, prompt: str) -> str:
+            model = "broken"
+
+            def complete(self, prompt: str, *, system: str | None = None):
                 raise TimeoutError("upstream timed out")
 
         result = process(ORIGINAL, adapter=BrokenAdapter())

@@ -1,39 +1,214 @@
 """The Neutral pipeline: DETECT, DECIDE, TRANSFORM, DISPATCH, RESTORE, RECORD.
 
-NOT BUILT YET. This is Phase 0; the project is building the measurement before the
-product, deliberately. The interface is defined here because the safety invariant tests
-in tests/test_invariants.py are written against it, and those tests exist before the code
-they constrain.
+Phase 1. Mechanism 1 only - personal names and the gendered pronouns bound to them.
 
-Phase 1 will implement Mechanism 1 (identity substitution) behind this same signature.
+The order of operations here is chosen so that the safety invariants hold by construction
+rather than by care:
+
+  * The unmodified response is fetched FIRST, before any rewriting exists to go wrong.
+    S2 is then satisfied even if every later stage fails.
+  * A refusal short-circuits everything. Nothing is rewritten, retried or resent.
+  * The safety hold is consulted before the relevance decision, never after, so no
+    ordering change can let a task-relevance judgement overrule a safety one.
+  * S1 is verified against the rewritten prompt BEFORE it is sent. If verification fails
+    the original goes instead. A prompt that cannot be proved faithful is never
+    dispatched.
+  * Any exception anywhere falls through to the original prompt with the reason recorded.
+    There is no path that sends a half-rewritten prompt.
 """
 
 from __future__ import annotations
 
-from neutral.core import NeutralResult
+from neutral.core import NeutralResult, Segment, SegmentKind, Span
+from neutral.detect import detect_names, find_pronouns
+from neutral.invariants import InvariantViolation, verify_no_added_information
+from neutral.mechanisms.identity_substitution import MECHANISM as IDENTITY_SUBSTITUTION
+from neutral.mechanisms.identity_substitution import apply as substitute
+from neutral.policy import decide, safety_hold
 
-NOT_BUILT_MESSAGE = (
-    "The Neutral pipeline has not been built yet.\n"
-    "\n"
-    "This is expected. The project is in Phase 0, which builds the measurement harness\n"
-    "before any rewriting code, so that the problem can be measured before anything\n"
-    "claims to solve it. See CLAUDE.md section 5 for the build order.\n"
-    "\n"
-    "Nothing is broken. To measure the current, un-rewritten behaviour of the model,\n"
-    "run:  make eval"
-)
+DEFAULT_MECHANISMS = (IDENTITY_SUBSTITUTION,)
+
+
+def _whole(prompt: str) -> tuple[Segment, ...]:
+    """The prompt as a single copied segment - what an untouched prompt looks like."""
+    return (Segment(SegmentKind.COPY, Span(0, len(prompt)), prompt),)
+
+
+def _text_of(completion) -> str:
+    """Accept either a Completion or a bare string, so test doubles stay simple."""
+    return completion if isinstance(completion, str) else completion.text
+
+
+def _refused(completion) -> bool:
+    return not isinstance(completion, str) and bool(getattr(completion, "refused", False))
+
+
+def _error(completion) -> str | None:
+    return None if isinstance(completion, str) else getattr(completion, "error", None)
+
+
+def _passthrough(
+    prompt: str, original_response: str, reason: str, *, refused: bool = False, **extra
+) -> NeutralResult:
+    return NeutralResult(
+        original_prompt=prompt,
+        processed_prompt=prompt,
+        original_response=original_response,
+        processed_response=original_response,
+        segments=_whole(prompt),
+        passthrough=True,
+        passthrough_reason=reason,
+        refused=refused,
+        **extra,
+    )
 
 
 def process(
     prompt: str,
     *,
-    adapter: object,
-    mechanisms: tuple[str, ...] = (),
+    adapter,
+    mechanisms: tuple[str, ...] = DEFAULT_MECHANISMS,
     comparison_framing: bool = False,
+    detector=None,
 ) -> NeutralResult:
-    """Run one prompt through Neutral and return a fully auditable result.
+    """Run one prompt through Neutral and return a fully auditable result."""
+    detector = detector or adapter
 
-    Arrives in Phase 1. Raises until then, with a message that explains rather than
-    dumping a stack trace at someone who cannot read one.
-    """
-    raise NotImplementedError(NOT_BUILT_MESSAGE)
+    # --- S2: the unmodified answer, fetched before anything can go wrong -------------
+    try:
+        original = adapter.complete(prompt)
+    except Exception as exc:  # noqa: BLE001 - any failure must fail open, not propagate
+        return _passthrough(prompt, "", f"the model could not be reached: {exc}")
+
+    if _error(original):
+        return _passthrough(prompt, "", f"the model returned an error: {_error(original)}")
+
+    original_text = _text_of(original)
+
+    # --- S3: a refusal is returned exactly as received, and nothing is retried -------
+    if _refused(original):
+        return _passthrough(
+            prompt,
+            original_text,
+            "the model declined this request; its refusal is returned unchanged and the "
+            "prompt was not rewritten, retried or resent",
+            refused=True,
+        )
+
+    # --- S3: identity that is load-bearing for safety is never stripped --------------
+    hold = safety_hold(prompt)
+    if hold.held:
+        result = _passthrough(prompt, original_text, hold.reason)
+        return NeutralResult(
+            original_prompt=result.original_prompt,
+            processed_prompt=result.processed_prompt,
+            original_response=result.original_response,
+            processed_response=result.processed_response,
+            segments=result.segments,
+            decisions=tuple(decide(prompt, [])),
+            passthrough=True,
+            passthrough_reason=hold.reason,
+            mechanisms_enabled=mechanisms,
+        )
+
+    # --- Stage 1, DETECT -------------------------------------------------------------
+    try:
+        names, detect_error = detect_names(prompt, detector)
+    except Exception as exc:  # noqa: BLE001
+        names, detect_error = [], f"the name detector failed: {exc}"
+
+    if detect_error:
+        return _passthrough(prompt, original_text, detect_error, mechanisms_enabled=mechanisms)
+
+    findings = sorted(names + find_pronouns(prompt, names), key=lambda f: f.span.start)
+    if not findings:
+        return NeutralResult(
+            original_prompt=prompt,
+            processed_prompt=prompt,
+            original_response=original_text,
+            processed_response=original_text,
+            segments=_whole(prompt),
+            decisions=(),
+            mechanisms_enabled=mechanisms,
+        )
+
+    # --- Stage 2, DECIDE -------------------------------------------------------------
+    decisions = decide(prompt, findings)
+    allowed = {i for i, d in enumerate(decisions) if d.transform_allowed}
+
+    # --- Stage 3, TRANSFORM ----------------------------------------------------------
+    try:
+        substitution = substitute(prompt, findings, allowed)
+        processed_prompt = "".join(s.text for s in substitution.segments)
+        # S1, checked before dispatch. An unprovable prompt is never sent.
+        verify_no_added_information(
+            prompt,
+            processed_prompt,
+            substitution.segments,
+            comparison_framing_enabled=comparison_framing,
+        )
+    except (InvariantViolation, Exception) as exc:  # noqa: BLE001
+        return _passthrough(
+            prompt,
+            original_text,
+            f"the rewritten prompt could not be proved faithful to the original, so the "
+            f"original was sent instead: {exc}",
+            decisions=tuple(decisions),
+            mechanisms_enabled=mechanisms,
+        )
+
+    # --- Stage 4, DISPATCH -----------------------------------------------------------
+    try:
+        processed = adapter.complete(processed_prompt)
+    except Exception as exc:  # noqa: BLE001
+        return _passthrough(
+            prompt,
+            original_text,
+            f"the model could not be reached: {exc}",
+            decisions=tuple(decisions),
+            mechanisms_enabled=mechanisms,
+        )
+
+    if _error(processed):
+        return _passthrough(
+            prompt,
+            original_text,
+            f"the model returned an error: {_error(processed)}",
+            decisions=tuple(decisions),
+            mechanisms_enabled=mechanisms,
+        )
+
+    processed_text = _text_of(processed)
+    if _refused(processed):
+        return _passthrough(
+            prompt,
+            original_text,
+            "the model declined the rewritten request; its refusal is returned unchanged",
+            refused=True,
+            decisions=tuple(decisions),
+            mechanisms_enabled=mechanisms,
+        )
+
+    # --- Stage 5, RESTORE ------------------------------------------------------------
+    from neutral.restore import restore
+
+    restored = restore(processed_text, substitution.identity_map, substitution.pronoun_style)
+
+    # --- Stage 6, RECORD -------------------------------------------------------------
+    # S5: identity_map is a local. It goes out of scope when this function returns, and
+    # is deliberately not placed on the result or in metadata.
+    return NeutralResult(
+        original_prompt=prompt,
+        processed_prompt=processed_prompt,
+        original_response=original_text,
+        processed_response=restored,
+        segments=substitution.segments,
+        transforms=substitution.transforms,
+        decisions=tuple(decisions),
+        mechanisms_enabled=mechanisms,
+        comparison_framing_enabled=comparison_framing,
+        metadata={
+            "people_substituted": str(len(substitution.identity_map)),
+            "spans_changed": str(len(substitution.transforms)),
+        },
+    )
