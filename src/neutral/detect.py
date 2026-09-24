@@ -128,3 +128,69 @@ def detect_names(prompt: str, adapter) -> tuple[list[Finding], str | None]:
     if parsed is None:
         return [], completion.error or "the name detector did not return a usable answer"
     return verify(prompt, parsed.spans), None
+
+
+# --------------------------------------------------------------------------------------
+# Offline detection
+# --------------------------------------------------------------------------------------
+
+# Capitalised words that are not people. Far from complete, and it does not need to be:
+# this path exists so the rewriting can be shown without calling a model, not so it can
+# be relied on.
+_NOT_NAMES = frozenset(
+    """monday tuesday wednesday thursday friday saturday sunday january february march
+    april may june july august september october november december senior junior lead
+    principal staff director manager engineer engineering designer design product sales
+    marketing finance legal hr operations ops support team teams company north south east
+    west api apis sql python java sev ceo cto coo cfo vp svp evp phd mba english spanish
+    french german write writing review reviews notes rate please assess draft summary
+    section quarter q1 q2 q3 q4 the this that these those they their there here when what
+    how why should would could must
+    give given tell explain describe list provide consider imagine suppose create make
+    help can does did is are was were i we you my our your if as at in on for with an and
+    but or so then now also however based using it its from about after before during
+    while because although unless until since each every some any all both either neither
+    one two three first second third last next previous another other same different
+    following above below here yes no ok okay thanks thank hello hi dear regards sincerely
+    imagine assume note draft edit revise improve shorten lengthen compare contrast""".split()
+) | set(PRONOUNS)  # a pronoun is never a name; they are found by lookup instead
+
+_CANDIDATE = re.compile(r"\b[A-Z][a-z]{1,}(?:'s)?(?:\s+[A-Z][a-z]{1,}(?:'s)?){0,2}\b")
+_SENTENCE_START = re.compile(r"(?:^|[.!?]\s+|\n\s*(?:[-*]\s*)?)$")
+
+
+def detect_names_offline(prompt: str) -> list[Finding]:
+    """Find likely personal names with rules only, making no network call.
+
+    This is deliberately not the detector the product uses. Capitalisation is a poor
+    signal for names in English and this will both miss real ones and flag words that are
+    not names. It exists so the interface can show what Neutral does to a prompt when
+    there is no API credit, clearly labelled as an approximation.
+    """
+    findings: list[Finding] = []
+    for match in _CANDIDATE.finditer(prompt):
+        text = match.group(0)
+        parts = text.split()
+        # re.sub, not strip: "Operations".strip("'s") is "Operation", which then misses a
+        # stoplist entry spelled "operations".
+        plain = [re.sub(r"'s$", "", w).lower() for w in parts]
+
+        # Trim stopwords off each end rather than rejecting the whole candidate. Without
+        # this, "Tell Mark how..." loses Mark because Tell opens the sentence.
+        first, last = 0, len(parts)
+        while first < last and plain[first] in _NOT_NAMES:
+            first += 1
+        while last > first and plain[last - 1] in _NOT_NAMES:
+            last -= 1
+        if first >= last:
+            continue
+
+        kept = " ".join(parts[first:last])
+        offset = match.start() + len(text) - len(text.lstrip()) if first == 0 else None
+        if offset is None:
+            offset = match.start() + text.index(
+                parts[first], sum(len(p) + 1 for p in parts[:first]) - 1 if first else 0
+            )
+        start = prompt.index(kept, match.start(), match.end())
+        findings.append(Finding(Span(start, start + len(kept)), kept, "person_name"))
+    return findings

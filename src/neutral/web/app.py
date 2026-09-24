@@ -13,7 +13,7 @@ from fastapi.responses import HTMLResponse
 
 from neutral.adapters.anthropic_api import AnthropicAdapter
 from neutral.config import ConfigError, load_settings
-from neutral.pipeline import process
+from neutral.pipeline import preview, process
 from neutral.web.page import page
 
 app = FastAPI(title="Neutral", docs_url=None, redoc_url=None)
@@ -51,21 +51,44 @@ def run(prompt: str = Form(default="")) -> HTMLResponse:
     try:
         adapter = _adapter()
     except ConfigError as exc:
-        return HTMLResponse(page(prompt=text, error=str(exc)))
+        return HTMLResponse(_preview_page(text, str(exc)))
 
     try:
         result = process(text, adapter=adapter)
     except Exception as exc:  # noqa: BLE001 - the page must never show a stack trace
-        return HTMLResponse(
-            page(
-                prompt=text,
-                error=f"Something went wrong and nothing was sent to the model: {exc}",
-            )
-        )
+        return HTMLResponse(_preview_page(text, f"Something went wrong: {exc}"))
+
+    # The model could not be reached - no key, no credit, no network. Rather than a dead
+    # end, show what Neutral WOULD send. The rewriting is the part worth seeing, and it
+    # costs nothing to compute.
+    if result.passthrough and result.passthrough_reason and not result.original_response:
+        return HTMLResponse(_preview_page(text, result.passthrough_reason))
 
     # The result holds the real names in its audit trail. It is rendered and dropped;
     # nothing here writes it anywhere.
     return HTMLResponse(page(prompt=text, result=result))
+
+
+PREVIEW_NOTE = (
+    "No model was called, so there are no answers to compare - but the rewriting below is "
+    "exactly what Neutral would send in place of your prompt. Names were found here by a "
+    "simpler rule than the one the product uses, so it may miss one or flag a word that "
+    "is not a name."
+)
+
+
+def _preview_page(text: str, why: str) -> str:
+    """What to show when the model is out of reach. Never a dead end.
+
+    The reason is folded into the preview note rather than shown as an error. A red
+    failure banner above a feature that is working correctly reads as a broken product,
+    and this path is not a failure - it is the rewriting, which is the part worth seeing.
+    """
+    try:
+        result = preview(text)
+    except Exception:  # noqa: BLE001
+        return page(prompt=text, error=why)
+    return page(prompt=text, result=result, preview_note=f"{why} {PREVIEW_NOTE}")
 
 
 @app.get("/health")

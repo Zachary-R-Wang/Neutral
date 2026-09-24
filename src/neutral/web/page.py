@@ -104,8 +104,11 @@ def _changes_table(result: NeutralResult) -> str:
     )
 
 
-def render_result(result: NeutralResult) -> str:
+def render_result(result: NeutralResult, *, preview_note: str = "") -> str:
     parts = []
+
+    if preview_note:
+        parts.append(f'<div class="note">{escape(preview_note)}</div>')
 
     if result.refused:
         parts.append(
@@ -164,12 +167,18 @@ def render_result(result: NeutralResult) -> str:
     return "".join(parts)
 
 
-def page(*, prompt: str = "", result: NeutralResult | None = None, error: str = "") -> str:
+def page(
+    *,
+    prompt: str = "",
+    result: NeutralResult | None = None,
+    error: str = "",
+    preview_note: str = "",
+) -> str:
     body = []
     if error:
         body.append(f'<div class="hold">{escape(error)}</div>')
     if result is not None:
-        body.append(render_result(result))
+        body.append(render_result(result, preview_note=preview_note))
 
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">

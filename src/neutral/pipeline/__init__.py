@@ -20,7 +20,7 @@ rather than by care:
 from __future__ import annotations
 
 from neutral.core import NeutralResult, Segment, SegmentKind, Span
-from neutral.detect import detect_names, find_pronouns
+from neutral.detect import detect_names, detect_names_offline, find_pronouns
 from neutral.invariants import InvariantViolation, verify_no_added_information
 from neutral.mechanisms.identity_substitution import MECHANISM as IDENTITY_SUBSTITUTION
 from neutral.mechanisms.identity_substitution import apply as substitute
@@ -211,4 +211,66 @@ def process(
             "people_substituted": str(len(substitution.identity_map)),
             "spans_changed": str(len(substitution.transforms)),
         },
+    )
+
+
+def preview(prompt: str, *, comparison_framing: bool = False) -> NeutralResult:
+    """Show what Neutral would send, without calling a model at all.
+
+    No network, no cost. Detection falls back to rules, which are worse than the real
+    detector and are labelled as such wherever this is displayed - capitalisation is a
+    poor signal for names in English.
+
+    The transform, the policy layer and the S1 check are the real ones. Only the detector
+    differs, so what this shows is genuinely what Neutral would send, given the names the
+    rules happened to find.
+    """
+    hold = safety_hold(prompt)
+    if hold.held:
+        return NeutralResult(
+            original_prompt=prompt,
+            processed_prompt=prompt,
+            original_response="",
+            processed_response="",
+            segments=_whole(prompt),
+            decisions=tuple(decide(prompt, [])),
+            passthrough=True,
+            passthrough_reason=hold.reason,
+        )
+
+    names = detect_names_offline(prompt)
+    findings = sorted(names + find_pronouns(prompt, names), key=lambda f: f.span.start)
+    if not findings:
+        return NeutralResult(
+            original_prompt=prompt,
+            processed_prompt=prompt,
+            original_response="",
+            processed_response="",
+            segments=_whole(prompt),
+        )
+
+    decisions = decide(prompt, findings)
+    allowed = {i for i, d in enumerate(decisions) if d.transform_allowed}
+    substitution = substitute(prompt, findings, allowed)
+    processed_prompt = "".join(s.text for s in substitution.segments)
+
+    # The same S1 check the real path runs. A preview that could not be proved faithful
+    # would be showing something Neutral would never actually send.
+    verify_no_added_information(
+        prompt,
+        processed_prompt,
+        substitution.segments,
+        comparison_framing_enabled=comparison_framing,
+    )
+
+    return NeutralResult(
+        original_prompt=prompt,
+        processed_prompt=processed_prompt,
+        original_response="",
+        processed_response="",
+        segments=substitution.segments,
+        transforms=substitution.transforms,
+        decisions=tuple(decisions),
+        mechanisms_enabled=DEFAULT_MECHANISMS,
+        metadata={"preview": "true"},
     )
