@@ -211,3 +211,83 @@ def detect_names_offline(prompt: str) -> list[Finding]:
         start = prompt.index(kept, match.start(), match.end())
         findings.append(Finding(Span(start, start + len(kept)), kept, "person_name"))
     return findings
+
+
+# --------------------------------------------------------------------------------------
+# Local detection - the default
+# --------------------------------------------------------------------------------------
+
+_NLP = None
+_NLP_FAILED = False
+
+
+def _model():
+    """Load the local name recogniser once, or give up quietly and let rules take over."""
+    global _NLP, _NLP_FAILED
+    if _NLP is not None or _NLP_FAILED:
+        return _NLP
+    try:
+        import spacy
+
+        _NLP = spacy.load("en_core_web_sm")
+    except Exception:  # noqa: BLE001 - a missing model must degrade, never crash
+        _NLP_FAILED = True
+    return _NLP
+
+
+def detect_names_local(prompt: str) -> list[Finding]:
+    """Find personal names on this machine: no network call, no cost, a few milliseconds.
+
+    A statistical recogniser running locally, then the same two rules the offline path
+    uses, because the recogniser has blind spots that rules cover cheaply:
+
+      * it returns "Nell" for "Mr. Nell", dropping a title that states the person's
+        gender - the span is extended backwards to take it in
+      * it sometimes swallows the verb in front of a name, returning "Tell Mark" - leading
+        stopwords are trimmed
+
+    Falls back to rules entirely if the model cannot be loaded, so the product works on a
+    machine where the download never happened.
+    """
+    nlp = _model()
+    if nlp is None:
+        return detect_names_offline(prompt)
+
+    findings: list[Finding] = []
+    taken: list[tuple[int, int]] = []
+
+    for entity in nlp(prompt).ents:
+        if entity.label_ != "PERSON":
+            continue
+        start, end = entity.start_char, entity.end_char
+
+        # Trim leading words the recogniser wrongly absorbed.
+        while start < end:
+            first = prompt[start:end].split(" ", 1)[0]
+            if _bare(first) in _NOT_NAMES and _bare(first) not in TITLES:
+                start += len(first) + 1
+            else:
+                break
+        if start >= end:
+            continue
+
+        # Extend backwards over a title, which belongs to the name and carries gender.
+        before = prompt[:start].rstrip()
+        for title in TITLES:
+            for spelling in (title.capitalize(), title.upper()):
+                for form in (spelling + ".", spelling):
+                    if before.endswith(form) and (
+                        len(before) == len(form) or not before[-len(form) - 1].isalnum()
+                    ):
+                        start = len(before) - len(form)
+                        break
+
+        text = prompt[start:end]
+        if not text.strip() or _bare(text) in _NOT_NAMES:
+            continue
+        if any(start < t_end and end > t_start for t_start, t_end in taken):
+            continue
+        taken.append((start, end))
+        findings.append(Finding(Span(start, end), text, "person_name"))
+
+    return sorted(findings, key=lambda f: f.span.start)

@@ -68,9 +68,8 @@ def run(prompt: str = Form(default="")) -> HTMLResponse:
 
 PREVIEW_NOTE = (
     "No model was called, so there are no answers to compare - but the rewriting below is "
-    "exactly what Neutral would send in place of your prompt. Names were found here by a "
-    "simpler rule than the one the product uses, so it may miss one or flag a word that "
-    "is not a name."
+    "exactly what Neutral would send in place of your prompt, produced by the same "
+    "detection and the same rules a real request goes through."
 )
 
 

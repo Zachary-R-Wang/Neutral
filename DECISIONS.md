@@ -5,6 +5,55 @@ minds. Newest first.
 
 ---
 
+## 2026-09-24 — Name detection runs locally, not through a model
+
+**The question that prompted it.** "Why does it need credits? The rewriting is basic text
+manipulation you can code into the website." Correct, and the first version did not do
+that: it asked a language model to find the names, which meant a paid API call before any
+rewriting could happen.
+
+**What actually costs money, and what does not.**
+
+| Step | Needs a model? |
+|---|---|
+| Finding the names | No - now local |
+| Replacing them, grouping people, handling titles and pronouns | No - never did |
+| Deciding whether identity is safety-relevant | No - rules |
+| Proving the rewrite added nothing (S1) | No - arithmetic |
+| Restoring the answer to natural language | No - reverse mapping |
+| **Getting the answer itself** | **Yes, unavoidably** |
+
+Only the last one remains, and it is not Neutral generating anything. It is the customer
+asking their own model the question they came to ask. In production the customer connects
+their own provider and pays their own bill; Neutral never buys tokens.
+
+**What was added.** spaCy with `en_core_web_sm` - about 12MB, loads in 0.6 seconds once at
+startup, then roughly 6 milliseconds a prompt. CLAUDE.md section 10 says to stop and ask
+before adding a dependency that changes the architecture in section 4. This does not: it
+is a library behind the existing detection interface, not a new service, queue or
+datastore. Recorded here rather than waved through.
+
+**Why the statistical model and the rules are combined rather than either alone.** They
+fail in different places, and each covers the other cheaply. The recogniser is far better
+at not flagging things that are not names - it ignores "Operations", "Senior", "quarterly
+planning", all of which the rules had to be told about one at a time. But it returns
+"Nell" for "Mr. Nell", dropping a title that states the person's gender, and it sometimes
+swallows the verb in front of a name and returns "Tell Mark". The rules fix both.
+
+If the model cannot be loaded, detection falls back to rules entirely, so the product
+still works on a machine where the download never happened.
+
+**What this changes about the interface.** The no-credit preview is no longer an
+approximation of what Neutral would do. It is the same detection, the same transform, the
+same policy layer and the same S1 check as a real request - only the answer is missing.
+
+**What would change our minds.** If evaluation shows local detection misses names the
+model-based detector catches, and that the misses matter to the divergence number, the
+model-based detector becomes an opt-in upgrade for customers who want it. The interface
+already supports passing one.
+
+---
+
 ## 2026-09-23 — Phase 5 built before Phases 2, 3 and 4, on the founder's instruction
 
 **What changed.** CLAUDE.md section 5 says do not skip ahead. Phases 2, 3 and 4 have been

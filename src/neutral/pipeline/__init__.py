@@ -21,7 +21,7 @@ from __future__ import annotations
 
 from neutral import errors
 from neutral.core import NeutralResult, Segment, SegmentKind, Span
-from neutral.detect import detect_names, detect_names_offline, find_pronouns
+from neutral.detect import detect_names, detect_names_local, find_pronouns
 from neutral.invariants import InvariantViolation, verify_no_added_information
 from neutral.mechanisms.identity_substitution import MECHANISM as IDENTITY_SUBSTITUTION
 from neutral.mechanisms.identity_substitution import apply as substitute
@@ -76,8 +76,16 @@ def process(
     comparison_framing: bool = False,
     detector=None,
 ) -> NeutralResult:
-    """Run one prompt through Neutral and return a fully auditable result."""
-    detector = detector or adapter
+    """Run one prompt through Neutral and return a fully auditable result.
+
+    Detection runs locally by default: no network call, no cost, a few milliseconds. Pass
+    `detector` to use a model for it instead, which is more accurate on hard cases and is
+    what the evaluation harness does when it is measuring detection itself.
+
+    That leaves exactly two calls to the connected model - one for the original prompt and
+    one for the rewritten one - and neither is Neutral generating anything. Both are the
+    customer asking their own model the question they came to ask.
+    """
 
     # --- S2: the unmodified answer, fetched before anything can go wrong -------------
     try:
@@ -128,7 +136,10 @@ def process(
 
     # --- Stage 1, DETECT -------------------------------------------------------------
     try:
-        names, detect_error = detect_names(prompt, detector)
+        if detector is None:
+            names, detect_error = detect_names_local(prompt), None
+        else:
+            names, detect_error = detect_names(prompt, detector)
     except Exception as exc:  # noqa: BLE001
         names, detect_error = [], f"the name detector failed: {exc}"
 
@@ -232,13 +243,9 @@ def process(
 def preview(prompt: str, *, comparison_framing: bool = False) -> NeutralResult:
     """Show what Neutral would send, without calling a model at all.
 
-    No network, no cost. Detection falls back to rules, which are worse than the real
-    detector and are labelled as such wherever this is displayed - capitalisation is a
-    poor signal for names in English.
-
-    The transform, the policy layer and the S1 check are the real ones. Only the detector
-    differs, so what this shows is genuinely what Neutral would send, given the names the
-    rules happened to find.
+    No network, no cost. This is the same detection, the same transform, the same policy
+    layer and the same S1 check that a real request goes through - the only thing missing
+    is asking the model for an answer, which is the one step that cannot be done locally.
     """
     hold = safety_hold(prompt)
     if hold.held:
@@ -253,7 +260,7 @@ def preview(prompt: str, *, comparison_framing: bool = False) -> NeutralResult:
             passthrough_reason=hold.reason,
         )
 
-    names = detect_names_offline(prompt)
+    names = detect_names_local(prompt)
     findings = sorted(names + find_pronouns(prompt, names), key=lambda f: f.span.start)
     if not findings:
         return NeutralResult(
