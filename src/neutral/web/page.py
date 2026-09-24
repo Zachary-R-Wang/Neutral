@@ -18,6 +18,7 @@ Everything a person or a model produced is escaped before it reaches the page.
 
 from __future__ import annotations
 
+import random
 import re
 from html import escape
 
@@ -25,6 +26,34 @@ from neutral.conversation import Conversation, Turn
 from neutral.invariants import BANNER
 
 PLACEHOLDER = "Ask anything!"
+
+# The server cannot know the visitor's local time, so the greeting is chosen in the
+# browser. A time-neutral one is rendered first, which is what someone with JavaScript
+# disabled keeps, and the script below swaps it before paint - no flash of the wrong one.
+ANYTIME_GREETINGS = (
+    "Hello!",
+    "Hi there!",
+    "Hey!",
+    "Welcome back!",
+    "What's on your mind?",
+    "Where shall we start?",
+    "Ready when you are.",
+)
+
+GREETING_JS = """
+(function(){
+  var el=document.getElementById('greeting'); if(!el) return;
+  var anytime=['Hello!','Hi there!','Hey!','Welcome back!',"What's on your mind?",
+               'Where shall we start?','Ready when you are.'];
+  var h=new Date().getHours(), timed;
+  if(h>=5&&h<12) timed=['Good morning!','Morning!'];
+  else if(h>=12&&h<17) timed=['Good afternoon!','Afternoon!'];
+  else if(h>=17&&h<22) timed=['Good evening!','Evening!'];
+  else timed=['Good night!','Still up?','Working late?'];
+  var pool=anytime.concat(timed);
+  el.textContent=pool[Math.floor(Math.random()*pool.length)];
+})();
+"""
 
 CSS = """
 /* Values taken from vercel.com and its Geist design system, read off the live site
@@ -330,12 +359,12 @@ def page(conversation: Conversation | None = None, *, error: str = "") -> str:
         thread = "".join(_turn(t) for t in conversation.turns)
         body = f'<div class="thread">{thread}</div>{_composer(opening=False)}'
     else:
+        greeting = escape(random.choice(ANYTIME_GREETINGS))
         body = f"""<div class="opening">
-  <h2>What do you want to ask?</h2>
-  <p>Neutral removes signals about who is asking before your prompt reaches the model,
-  then puts them back so the answer reads normally.</p>
+  <h2 id="greeting">{greeting}</h2>
+  <p>Neutral removes signals about who is asking before your prompt reaches the model.</p>
   {_composer(opening=True)}
-</div>"""
+</div>\n<script>{GREETING_JS}</script>"""
 
     banner_error = f'<div class="flag">{escape(error)}</div>' if error else ""
     reset = (

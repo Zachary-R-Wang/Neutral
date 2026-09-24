@@ -11,6 +11,7 @@ Two rules shape this page and both are easy to break by accident:
 from __future__ import annotations
 
 import re
+from html import escape
 
 from neutral.adapters.base import Completion
 from neutral.conversation import Conversation, ask
@@ -113,10 +114,32 @@ class TestWhatChangedIsRecorded:
 
 
 class TestTheOpeningState:
-    def test_it_asks_one_question_and_shows_one_box(self):
+    def test_it_greets_and_shows_one_box(self):
         html = page()
-        assert "What do you want to ask?" in html
+        assert 'id="greeting"' in html
         assert html.count("<textarea") == 1
+
+    def test_the_greeting_is_a_real_one_without_javascript(self):
+        """Someone with scripting off keeps whatever the server rendered."""
+        from neutral.web.page import ANYTIME_GREETINGS
+
+        greeting = re.search(r'id="greeting">([^<]+)<', page())
+        assert greeting, "no greeting was rendered"
+        assert greeting.group(1) in [escape(g) for g in ANYTIME_GREETINGS]
+
+    def test_the_server_never_renders_a_time_specific_greeting(self):
+        """It cannot know the visitor's local hour, so it must not guess at one."""
+        renders = [page() for _ in range(40)]
+        for word in ("morning", "afternoon", "evening", "night", "Still up", "late"):
+            for html in renders:
+                shown = re.search(r'id="greeting">([^<]+)<', html).group(1)
+                assert word.lower() not in shown.lower(), (
+                    f"the server rendered {shown!r}, which assumes a time of day"
+                )
+
+    def test_the_greeting_varies(self):
+        seen = {re.search(r'id="greeting">([^<]+)<', page()).group(1) for _ in range(60)}
+        assert len(seen) > 1, "the same greeting every time is not a rotation"
 
     def test_there_is_no_thread_before_anything_is_asked(self):
         assert '<div class="thread">' not in page()
