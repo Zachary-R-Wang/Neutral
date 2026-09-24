@@ -5,6 +5,37 @@ minds. Newest first.
 
 ---
 
+## 2026-09-23 — Phase 5 built before Phases 2, 3 and 4, on the founder's instruction
+
+**What changed.** CLAUDE.md section 5 says do not skip ahead. Phases 2, 3 and 4 have been
+skipped: the project went from Phase 1 straight to the interface, so there is something to
+show investors before there is funding to measure with.
+
+**Whose call this was.** The founder's, explicitly, after being told the case against it.
+Recorded here because it is a deliberate deviation from the governing document, not an
+oversight, and because whoever reads this repo later should know which parts were built in
+the order the plan intended and which were not.
+
+**The argument that was made against it.** A demo shows what Neutral does. It cannot show
+that what Neutral does is worth doing, and that second thing is the pitch. The evidence
+currently points the other way: on the 42 pairs that scored, the model's judgements showed
+no detectable difference, only wording, and most of that wording difference turned out to
+be a bug in the scorer. The sycophancy half has never been tested. Finding out costs
+$8.32.
+
+**What was not compromised.** All seven safety invariants pass against real code. The S6
+banner is on every page. No claim about effectiveness appears anywhere in the interface,
+because there is no measurement to support one. The page states plainly that Phase 1 is
+all that exists.
+
+**What this costs later.** Phases 2 to 4 still have to happen for the product to work as
+described: without the relevance gate Neutral strips names it should keep, and without
+restoration quality it will sometimes discuss the wrong person. The interface makes that
+visible rather than hiding it - every change is shown with its reason - but it does not
+fix it.
+
+---
+
 ## 2026-09-20 — OPEN: rewriting a prompt can turn a refusal into an answer, and S3 does not cover it
 
 **Status: needs a decision from the founder in writing, before Phase 1 ships.**

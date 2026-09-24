@@ -20,7 +20,8 @@ help:
 	@echo ""
 	@echo "  Neutral"
 	@echo ""
-	@echo "    make dev      Set up the project and check it is ready to run."
+	@echo "    make dev      Start Neutral in your browser."
+	@echo "    make check    Check the setup and that the API key works."
 	@echo "    make test     Run the tests, including the safety invariants."
 	@echo "    make eval     Measure divergence and write a report."
 	@echo "    make dataset  Print the matched prompt pairs to check them by eye."
@@ -33,6 +34,13 @@ help:
 
 dev: .venv
 	@$(UV) sync --extra dev --quiet
+	@$(RUN) -m neutral.eval.cli doctor --offline
+	@echo ""
+	@echo "  Starting Neutral at http://127.0.0.1:8000  (press Ctrl-C to stop)"
+	@echo ""
+	@$(RUN) -m uvicorn neutral.web.app:app --host 127.0.0.1 --port 8000 --log-level warning --reload --reload-dir src
+
+check: .venv
 	@$(RUN) -m neutral.eval.cli doctor
 
 test: .venv

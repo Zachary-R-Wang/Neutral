@@ -59,6 +59,34 @@ def estimate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
     return (input_tokens / 1_000_000) * in_rate + (output_tokens / 1_000_000) * out_rate
 
 
+def _plain_english(exc) -> str:
+    """Turn an API error into something a non-engineer can act on.
+
+    CLAUDE.md section 2: an error must say what went wrong and what to do about it, in
+    English. A raw JSON error body pasted onto a page is neither.
+    """
+    raw = (getattr(exc, "message", "") or str(exc)).lower()
+
+    if "credit balance" in raw:
+        return (
+            "Your Anthropic account has run out of API credit, so nothing could be sent "
+            "to the model. Add credit at console.anthropic.com/settings/billing and try "
+            "again. API credit is billed separately from a Claude subscription."
+        )
+    if "rate limit" in raw or getattr(exc, "status_code", 0) == 429:
+        return (
+            "The API is rate limiting this account. Wait a minute and try again, or "
+            "lower NEUTRAL_CONCURRENCY in .env if this keeps happening."
+        )
+    if getattr(exc, "status_code", 0) >= 500:
+        return "The model provider had a server problem. This is usually temporary - try again."
+
+    return (
+        f"The model provider rejected the request (error {getattr(exc, 'status_code', '?')}). "
+        f"It said: {getattr(exc, 'message', str(exc))}"
+    )
+
+
 class AnthropicAdapter:
     """Calls a Claude model and returns a provider-neutral Completion."""
 
@@ -149,11 +177,7 @@ class AnthropicAdapter:
                 error="Could not reach the Anthropic API. Check your internet connection.",
             )
         except anthropic.APIStatusError as exc:
-            return Completion(
-                text="",
-                model=self.model,
-                error=f"The API returned an error ({exc.status_code}): {exc.message}",
-            )
+            return Completion(text="", model=self.model, error=_plain_english(exc))
 
         return self._to_completion(response)
 
