@@ -80,6 +80,26 @@ The subject model moved to Sonnet 5, which refused nothing in the same probe. Re
 are now tracked per variant on every run, so this is measured rather than assumed. Any
 result on any model should be read alongside its refusal rate.
 
+## Restoration converts pronouns that were never about a person
+
+Seen in a real answer, not in a test. The model wrote, of a delayed project, that blockers
+should be surfaced early - "surfacing them in week one gives the team options". Restoration
+turned "them" into "her", because the request had one substituted person and every neutral
+pronoun was assumed to refer to her. The result reads "surfacing her in one week", which
+is not what the model said and not what the reader wants.
+
+"They", "them" and "their" are used for things as often as for people. Telling the two
+apart is coreference resolution - working out what a pronoun points at - and nothing in
+Phase 1 does it. The current rule converts every neutral pronoun when exactly one person
+was substituted, which is right most of the time and visibly wrong the rest of the time.
+
+Two things limit the damage. Pronouns are left alone entirely when two or more people were
+substituted, because there the guess would be worse. And the unmodified answer is always
+one click below, so a reader who hits a strange sentence can see what was actually said.
+
+This is Phase 3's problem - restoration quality - and it is the clearest argument for why
+that phase exists.
+
 ## Sixty pairs is a small sample
 
 Twelve pairs per category. That is enough to detect a large effect and not enough to

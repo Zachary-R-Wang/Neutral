@@ -80,12 +80,25 @@ class TestTheOriginalIsAlwaysOneClickAway:
         assert reply and "details" in reply.group(1)
 
     def test_it_is_styled_as_a_different_kind_of_thing(self):
+        """Asserts the property, not the pixel values, so restyling does not break it."""
         html, _ = rendered()
-        assert "--raw:" in html, "the original has no surface colour of its own"
-        assert ".raw .text{white-space:pre-wrap;font-size:13.5px" in html, (
+
+        def font_size(selector: str) -> float:
+            block = re.search(rf"{re.escape(selector)}\s*\{{([^}}]*)\}}", html)
+            assert block, f"no rule found for {selector}"
+            size = re.search(r"font-size:\s*([\d.]+)px", block.group(1))
+            assert size, f"{selector} sets no font size"
+            return float(size.group(1))
+
+        assert font_size(".prose.small") < font_size(".reply .prose"), (
             "the original should be more compact than the answer above it"
         )
-        assert re.search(r"\.reply \.text\{white-space:pre-wrap;font-size:15\.5px", html)
+
+        surface = re.search(r"\.raw\s*\{([^}]*)\}", html)
+        assert surface and "background:" in surface.group(1), (
+            "the original needs a surface of its own, so it reads as a different kind of "
+            "thing rather than as more of the answer"
+        )
 
 
 class TestWhatChangedIsRecorded:

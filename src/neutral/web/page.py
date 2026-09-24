@@ -18,6 +18,7 @@ Everything a person or a model produced is escaped before it reaches the page.
 
 from __future__ import annotations
 
+import re
 from html import escape
 
 from neutral.conversation import Conversation, Turn
@@ -30,76 +31,205 @@ PLACEHOLDER = (
 )
 
 CSS = """
-:root{--surface:#fcfcfb;--plane:#f9f9f7;--ink:#0b0b0b;--ink2:#52514e;--muted:#898781;
---line:#e1e0d9;--accent:#2a78d6;--warn:#fab219;--hold:#d03b3b;
---raw:#f2f0ea;--raw-line:#d8d5c8;color-scheme:light}
-@media(prefers-color-scheme:dark){:root:not([data-theme=light]){--surface:#1a1a19;
---plane:#0d0d0d;--ink:#fff;--ink2:#c3c2b7;--muted:#898781;--line:#2c2c2a;--accent:#3987e5;
---raw:#232321;--raw-line:#3a3a36;color-scheme:dark}}
+/* Values taken from vercel.com and its Geist design system, read off the live site
+   rather than approximated: text hsl(0 0% 9%) on hsl(0 0% 98%), borders at 92% light and
+   18% dark, headings at weight 400 with tight negative tracking, 6px radii, and almost no
+   colour at all. The restraint is the point - nothing here is decorative. */
+:root{
+  --bg:hsl(0 0% 98%); --panel:hsl(0 0% 100%); --subtle:hsl(0 0% 95%);
+  --fg:hsl(0 0% 9%); --fg-2:hsl(0 0% 30%); --fg-3:hsl(0 0% 56%);
+  --line:hsl(0 0% 92%); --line-2:hsl(0 0% 90%);
+  --solid:hsl(0 0% 9%); --on-solid:hsl(0 0% 100%);
+  --amber:hsl(38 92% 45%);
+  color-scheme:light;
+}
+@media(prefers-color-scheme:dark){:root:not([data-theme=light]){
+  --bg:hsl(0 0% 0%); --panel:hsl(0 0% 4%); --subtle:hsl(0 0% 10%);
+  --fg:hsl(0 0% 93%); --fg-2:hsl(0 0% 63%); --fg-3:hsl(0 0% 56%);
+  --line:hsl(0 0% 18%); --line-2:hsl(0 0% 22%);
+  --solid:hsl(0 0% 93%); --on-solid:hsl(0 0% 4%);
+  --amber:hsl(38 92% 58%);
+  color-scheme:dark;
+}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--plane);color:var(--ink);
-font:16px/1.65 ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif}
-.wrap{max-width:780px;margin:0 auto;padding:22px 16px 40px;min-height:100vh;
-display:flex;flex-direction:column}
-.banner{background:var(--warn);color:#0b0b0b;padding:9px 14px;border-radius:8px;
-font-weight:600;font-size:13px;margin-bottom:20px}
-.brand{display:flex;align-items:center;gap:10px;margin-bottom:6px}
-.brand h1{font-size:21px;margin:0;letter-spacing:-.02em}
-.brand span{color:var(--muted);font-size:13px}
+html,body{height:100%}
+body{
+  margin:0;background:var(--bg);color:var(--fg);
+  font-family:"Geist","Geist Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,
+    "Helvetica Neue",Arial,sans-serif;
+  font-size:15px;line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:720px;margin:0 auto;padding:20px 24px 32px;min-height:100%;
+  display:flex;flex-direction:column}
 
-/* ---- opening state ---- */
+/* header -------------------------------------------------------------------- */
+.top{display:flex;align-items:center;gap:12px;padding-bottom:16px}
+.top h1{font-size:15px;font-weight:500;margin:0;letter-spacing:-.01em}
+.notice{display:flex;align-items:center;gap:7px;margin-left:auto;font-size:12px;
+  color:var(--fg-3);letter-spacing:-.005em}
+.notice::before{content:"";width:5px;height:5px;border-radius:50%;
+  background:var(--amber);flex:none}
+.rule{height:1px;background:var(--line);margin-bottom:28px}
+
+/* opening ------------------------------------------------------------------- */
 .opening{flex:1;display:flex;flex-direction:column;justify-content:center;
-align-items:center;text-align:center;padding-bottom:12vh}
-.opening h2{font-size:27px;margin:0 0 10px;letter-spacing:-.02em}
-.opening p{color:var(--ink2);margin:0 0 26px;max-width:30em}
-.opening form{width:100%;max-width:640px}
+  padding-bottom:14vh}
+.opening h2{font-size:38px;font-weight:400;letter-spacing:-.045em;line-height:1.05;
+  margin:0 0 12px}
+.opening p{color:var(--fg-2);margin:0 0 28px;max-width:34em;font-size:15px}
 
-/* ---- conversation ---- */
-.thread{flex:1;display:flex;flex-direction:column;gap:22px;margin-bottom:26px}
-.asked{align-self:flex-end;max-width:86%;background:var(--accent);color:#fff;
-padding:10px 15px;border-radius:15px 15px 4px 15px;white-space:pre-wrap;font-size:15px}
-.reply{align-self:flex-start;max-width:96%}
-.reply .text{white-space:pre-wrap;font-size:15.5px}
-.flag{background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--warn);
-border-radius:8px;padding:9px 13px;font-size:13px;color:var(--ink2);margin-bottom:9px}
-.flag.stop{border-left-color:var(--hold)}
+/* thread -------------------------------------------------------------------- */
+.thread{flex:1;display:flex;flex-direction:column;gap:26px;margin-bottom:28px}
+.asked{align-self:flex-end;max-width:82%;background:var(--panel);
+  border:1px solid var(--line);border-radius:10px;padding:9px 13px;
+  white-space:pre-wrap;font-size:14.5px;color:var(--fg-2)}
+.reply .prose{font-size:15px}
+.prose>*:first-child{margin-top:0}
+.prose>*:last-child{margin-bottom:0}
+.prose p{margin:0 0 13px}
+.prose h3,.prose h4,.prose h5,.prose h6{font-size:15px;font-weight:600;
+  letter-spacing:-.012em;margin:20px 0 9px}
+.prose ul,.prose ol{margin:0 0 13px;padding-left:20px}
+.prose li{margin:0 0 5px}
+.prose li::marker{color:var(--fg-3)}
+.prose strong{font-weight:600}
+.prose code{font-family:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  font-size:.86em;background:var(--subtle);padding:1.5px 5px;border-radius:4px}
+.prose hr{border:0;border-top:1px solid var(--line);margin:18px 0}
+.flag{font-size:13px;color:var(--fg-2);background:var(--subtle);
+  border-radius:8px;padding:9px 12px;margin-bottom:10px}
 
-/* ---- the original answer, opening in place ---- */
-details.original{margin-top:7px}
-details.original>summary{display:inline-flex;align-items:center;gap:5px;cursor:pointer;
-font-size:12px;color:var(--muted);border:1px solid var(--line);border-radius:999px;
-padding:2px 10px;list-style:none;user-select:none}
+/* the original answer, opening in place ------------------------------------- */
+details.original{margin-top:10px}
+details.original>summary{display:inline-flex;align-items:center;gap:6px;cursor:pointer;
+  font-size:12.5px;color:var(--fg-3);border:1px solid var(--line);border-radius:6px;
+  padding:3px 9px;list-style:none;user-select:none;transition:color .12s,border-color .12s}
 details.original>summary::-webkit-details-marker{display:none}
-details.original>summary:hover{color:var(--ink2);border-color:var(--raw-line)}
-details.original>summary::before{content:"\\25B8";font-size:9px;transition:transform .12s}
+details.original>summary::before{content:"";width:0;height:0;
+  border-left:4px solid currentColor;border-top:3.5px solid transparent;
+  border-bottom:3.5px solid transparent;transition:transform .12s}
 details.original[open]>summary::before{transform:rotate(90deg)}
-details.original[open]>summary{color:var(--ink2)}
-.raw{margin-top:6px;background:var(--raw);border:1px solid var(--raw-line);
-border-left:3px solid var(--raw-line);border-radius:8px;padding:10px 13px}
-.raw .label{font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);
-margin-bottom:5px}
-.raw .text{white-space:pre-wrap;font-size:13.5px;line-height:1.5;color:var(--ink2)}
-.raw .changes{margin-top:9px;padding-top:8px;border-top:1px solid var(--raw-line);
-font-size:12px;color:var(--muted)}
-.raw .changes code{background:var(--plane);padding:0 4px;border-radius:3px}
+details.original>summary:hover,details.original[open]>summary{color:var(--fg-2);
+  border-color:var(--line-2)}
+.raw{margin-top:8px;background:var(--subtle);border-radius:8px;padding:12px 14px}
+.raw .label{font-size:11px;letter-spacing:.02em;color:var(--fg-3);margin-bottom:6px}
+.prose.small{font-size:13px;line-height:1.55;color:var(--fg-2)}
+.prose.small p{margin:0 0 9px}
+.prose.small h3,.prose.small h4,.prose.small h5,.prose.small h6{font-size:13px;
+  margin:13px 0 6px}
+.prose.small ul,.prose.small ol{margin:0 0 9px;padding-left:18px}
+.prose.small li{margin:0 0 3px}
+.prose.small hr{margin:12px 0}
+.raw .changes{margin-top:10px;padding-top:9px;border-top:1px solid var(--line-2);
+  font-size:12px;color:var(--fg-3)}
+.raw .changes code{font-family:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  font-size:11.5px;color:var(--fg-2)}
 
-/* ---- composer ---- */
-form.composer{position:sticky;bottom:0;background:var(--plane);padding-top:8px}
-.box{display:flex;gap:9px;align-items:flex-end;border:1px solid var(--line);
-border-radius:14px;background:var(--surface);padding:8px 8px 8px 14px}
-.box:focus-within{border-color:var(--accent)}
-textarea{flex:1;border:0;background:transparent;color:var(--ink);font:inherit;
-font-size:15px;resize:none;outline:none;max-height:180px;min-height:26px;padding:4px 0}
-button{background:var(--accent);color:#fff;border:0;border-radius:10px;
-padding:9px 17px;font:inherit;font-weight:600;cursor:pointer;white-space:nowrap}
-button:hover{filter:brightness(1.08)}
-button:disabled{opacity:.55;cursor:default}
-button.ghost{background:transparent;color:var(--muted);border:1px solid var(--line);
-font-weight:500;font-size:12px;padding:4px 11px;border-radius:999px}
-button.ghost:hover{color:var(--ink2);filter:none}
-.hint{color:var(--muted);font-size:12px;margin:8px 2px 0;line-height:1.55}
-.hint a{color:var(--muted)}
+/* composer ------------------------------------------------------------------ */
+form.composer{position:sticky;bottom:0;background:var(--bg);padding:10px 0 0}
+.box{display:flex;gap:8px;align-items:flex-end;border:1px solid var(--line);
+  border-radius:12px;background:var(--panel);padding:8px 8px 8px 14px;
+  transition:border-color .12s}
+.box:focus-within{border-color:var(--fg-3)}
+textarea{flex:1;border:0;background:transparent;color:var(--fg);font:inherit;
+  font-size:15px;resize:none;outline:none;max-height:184px;min-height:26px;padding:4px 0}
+textarea::placeholder{color:var(--fg-3)}
+button{background:var(--solid);color:var(--on-solid);border:0;border-radius:6px;
+  padding:7px 14px;font:inherit;font-size:13.5px;font-weight:500;cursor:pointer;
+  white-space:nowrap;transition:opacity .12s}
+button:hover{opacity:.85}
+button:disabled{opacity:.4;cursor:default}
+button.ghost{background:transparent;color:var(--fg-3);border:1px solid var(--line);
+  font-weight:400;font-size:12.5px;padding:3px 9px}
+button.ghost:hover{color:var(--fg-2);border-color:var(--line-2);opacity:1}
+.hint{color:var(--fg-3);font-size:12px;margin:9px 2px 0;letter-spacing:-.005em}
+@media(max-width:640px){.opening h2{font-size:30px}.wrap{padding:16px 16px 24px}}
 """
+
+
+def markdown(text: str) -> str:
+    """Render the small part of Markdown that models actually use.
+
+    Models answer in Markdown whether or not they were asked to, and showing a literal
+    "**On execution:**" in the thread makes a finished product look unfinished.
+
+    The order here is the whole safety story: **everything is escaped first**, so by the
+    time any formatting runs, the text cannot contain markup. Every tag emitted below is
+    one this function wrote. Nothing from a model or a person can become an element.
+    """
+    safe = escape(text)
+    out: list[str] = []
+    bullets: list[str] = []
+    numbers: list[str] = []
+
+    def close_lists() -> None:
+        nonlocal bullets, numbers
+        if bullets:
+            out.append("<ul>" + "".join(f"<li>{b}</li>" for b in bullets) + "</ul>")
+            bullets = []
+        if numbers:
+            out.append("<ol>" + "".join(f"<li>{n}</li>" for n in numbers) + "</ol>")
+            numbers = []
+
+    def inline(chunk: str) -> str:
+        chunk = re.sub(r"`([^`]+)`", r"<code>\1</code>", chunk)
+        chunk = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", chunk)
+        chunk = re.sub(r"(?<![\w*])\*([^*\n]+)\*(?![\w*])", r"<em>\1</em>", chunk)
+        return chunk
+
+    paragraph: list[str] = []
+
+    def close_paragraph() -> None:
+        nonlocal paragraph
+        if paragraph:
+            out.append("<p>" + inline(" ".join(paragraph)) + "</p>")
+            paragraph = []
+
+    for line in safe.split("\n"):
+        stripped = line.strip()
+
+        if not stripped:
+            close_paragraph()
+            close_lists()
+            continue
+
+        heading = re.match(r"(#{1,4})\s+(.*)", stripped)
+        if heading:
+            close_paragraph()
+            close_lists()
+            level = min(len(heading.group(1)) + 2, 6)
+            out.append(f"<h{level}>{inline(heading.group(2))}</h{level}>")
+            continue
+
+        if re.match(r"^(-{3,}|\*{3,}|_{3,})$", stripped):
+            close_paragraph()
+            close_lists()
+            out.append("<hr>")
+            continue
+
+        bullet = re.match(r"[-*+]\s+(.*)", stripped)
+        if bullet:
+            close_paragraph()
+            if numbers:
+                close_lists()
+            bullets.append(inline(bullet.group(1)))
+            continue
+
+        number = re.match(r"\d+[.)]\s+(.*)", stripped)
+        if number:
+            close_paragraph()
+            if bullets:
+                close_lists()
+            numbers.append(inline(number.group(1)))
+            continue
+
+        close_lists()
+        paragraph.append(stripped)
+
+    close_paragraph()
+    close_lists()
+    return "".join(out)
 
 
 def _flag(turn: Turn) -> str:
@@ -124,7 +254,7 @@ def _turn(turn: Turn) -> str:
 
     reply = [f'<div class="reply">{_flag(turn)}']
     if turn.answer:
-        reply.append(f'<div class="text">{escape(turn.answer)}</div>')
+        reply.append(f'<div class="prose">{markdown(turn.answer)}</div>')
 
     if turn.failed and turn.changes:
         reply.append(
@@ -140,7 +270,7 @@ def _turn(turn: Turn) -> str:
             "<summary>Original response</summary>"
             '<div class="raw"><div class="label">What the model said to your prompt '
             "as written</div>"
-            f'<div class="text">{escape(turn.original_answer)}</div>'
+            f'<div class="prose small">{markdown(turn.original_answer)}</div>'
             f"{_changes(turn)}</div></details>"
         )
     reply.append("</div>")
@@ -181,8 +311,7 @@ def _composer(*, opening: bool) -> str:
       placeholder="{escape(PLACEHOLDER) if opening else "Reply..."}"></textarea>
     <button type="submit">{label}</button>
   </div>
-  <p class="hint">Enter to send, Shift-Enter for a new line. Nothing is saved. Names are
-  held in memory for one request, then discarded.</p>
+  <p class="hint">Enter to send. Nothing is saved.</p>
 </form>"""
 
 
@@ -200,10 +329,9 @@ def page(conversation: Conversation | None = None, *, error: str = "") -> str:
   {_composer(opening=True)}
 </div>"""
 
-    banner_error = f'<div class="flag stop">{escape(error)}</div>' if error else ""
+    banner_error = f'<div class="flag">{escape(error)}</div>' if error else ""
     reset = (
-        '<form method="post" action="/new" style="margin-left:auto">'
-        '<button type="submit" class="ghost">New conversation</button></form>'
+        '<form method="post" action="/new"><button type="submit" class="ghost">New</button></form>'
         if started
         else ""
     )
@@ -211,10 +339,18 @@ def page(conversation: Conversation | None = None, *, error: str = "") -> str:
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Neutral</title><style>{CSS}</style></head><body><div class="wrap">
-<div class="banner">{escape(BANNER)}</div>
-<div class="brand"><h1>Neutral</h1>
-<span>identity removed before the model sees it</span>{reset}</div>
+<title>Neutral</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet"
+  href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono&display=swap">
+<style>{CSS}</style></head><body><div class="wrap">
+<div class="top">
+  <h1>Neutral</h1>
+  <div class="notice">{escape(BANNER)}</div>
+  {reset}
+</div>
+<div class="rule"></div>
 {banner_error}
 {body}
 </div><script>{COMPOSER_JS}</script></body></html>
