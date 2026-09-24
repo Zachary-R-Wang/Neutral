@@ -182,3 +182,55 @@ def test_a_transform_record_renders_without_breaking_the_page():
     html = page(conversation)
     assert "<b>Emily</b>" not in html
     assert "&lt;b&gt;Emily&lt;/b&gt;" in html
+
+
+class TestTheLegalPages:
+    """Not lawyer-written, and the pages say so. These check they cannot ship half-done."""
+
+    def test_both_pages_render(self):
+        from neutral.web.legal import PRIVACY, TERMS
+        from neutral.web.page import legal_page
+
+        for title, body in (("Terms of use", TERMS), ("Privacy", PRIVACY)):
+            html = legal_page(title, body)
+            assert title in html
+            assert "evaluation use only" in html
+
+    def test_unfilled_placeholders_are_flagged_loudly(self):
+        """A terms page that quietly ships saying FILL_IN is worse than none at all."""
+        from neutral.web.legal import TERMS
+        from neutral.web.page import legal_page
+
+        html = legal_page("Terms of use", TERMS)
+        assert "This page is not finished" in html
+        assert 'class="fillin"' in html
+
+    def test_a_filled_page_shows_no_warning(self):
+        from neutral.web.page import legal_page
+
+        html = legal_page("Terms of use", "## Done\n\nOperated by Acme Ltd.")
+        assert "This page is not finished" not in html
+        assert 'class="fillin"' not in html
+
+    def test_the_highlight_stops_at_the_placeholder(self):
+        """It used to run to the next full stop and swallow the sentence after it."""
+        import re
+
+        from neutral.web.page import legal_page
+
+        html = legal_page("T", "Operated by [[your name]] and nothing else follows.")
+        span = re.search(r'<span class="fillin">(.*?)</span>', html)
+        assert span and "nothing else follows" not in span.group(1)
+
+    def test_the_third_party_disclosure_is_present(self):
+        """The most important thing on either page: prompts leave this machine."""
+        from neutral.web.legal import PRIVACY
+
+        lowered = PRIVACY.lower()
+        assert "third-party model provider" in lowered
+        assert "not stored here" in lowered or "nothing is stored here" in lowered
+
+    def test_the_main_page_links_to_both(self):
+        html = page()
+        assert 'href="/terms"' in html
+        assert 'href="/privacy"' in html

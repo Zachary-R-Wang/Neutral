@@ -21,7 +21,8 @@ from neutral import errors
 from neutral.adapters.anthropic_api import AnthropicAdapter
 from neutral.config import ConfigError, load_settings
 from neutral.conversation import Conversation, ask
-from neutral.web.page import page
+from neutral.web.legal import PRIVACY, TERMS
+from neutral.web.page import legal_page, page
 
 app = FastAPI(title="Neutral", docs_url=None, redoc_url=None)
 
@@ -96,6 +97,16 @@ def new(request: Request) -> RedirectResponse:
     response = RedirectResponse("/", status_code=303)
     response.delete_cookie(COOKIE)
     return response
+
+
+@app.get("/terms", response_class=HTMLResponse)
+def terms() -> HTMLResponse:
+    return HTMLResponse(legal_page("Terms of use", TERMS))
+
+
+@app.get("/privacy", response_class=HTMLResponse)
+def privacy() -> HTMLResponse:
+    return HTMLResponse(legal_page("Privacy", PRIVACY))
 
 
 @app.get("/health")

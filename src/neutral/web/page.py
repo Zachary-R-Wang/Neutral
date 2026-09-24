@@ -144,6 +144,18 @@ button.ghost{background:transparent;color:var(--fg-3);border:1px solid var(--lin
   font-weight:400;font-size:12.5px;padding:3px 9px}
 button.ghost:hover{color:var(--fg-2);border-color:var(--line-2);opacity:1}
 .hint{color:var(--fg-3);font-size:12px;margin:9px 2px 0;letter-spacing:-.005em}
+.foot{margin-top:28px;padding-top:16px;border-top:1px solid var(--line);
+  display:flex;gap:16px;font-size:12px;color:var(--fg-3)}
+.foot a{color:var(--fg-3);text-decoration:none}
+.foot a:hover{color:var(--fg-2)}
+.legal{max-width:640px}
+.legal h2{font-size:28px;font-weight:400;letter-spacing:-.035em;margin:0 0 20px}
+.legal .prose h3{margin-top:26px}
+.back{display:inline-block;margin-bottom:22px;font-size:13px;color:var(--fg-3);
+  text-decoration:none}
+.back:hover{color:var(--fg-2)}
+.fillin{background:hsl(38 92% 50% / .18);border-bottom:1.5px solid var(--amber);
+  padding:0 3px;border-radius:2px;font-weight:500}
 @media(max-width:640px){.opening h2{font-size:30px}.wrap{padding:16px 16px 24px}}
 """
 
@@ -353,5 +365,53 @@ def page(conversation: Conversation | None = None, *, error: str = "") -> str:
 <div class="rule"></div>
 {banner_error}
 {body}
+<div class="foot">
+  <a href="/terms">Terms</a><a href="/privacy">Privacy</a>
+  <span style="margin-left:auto">Phase 1 &mdash; names and bound pronouns only</span>
+</div>
 </div><script>{COMPOSER_JS}</script></body></html>
+"""
+
+
+FILL_IN_NOTE = (
+    "This page is not finished. Every highlighted item must be replaced before anyone "
+    "outside the project can reach this site."
+)
+
+
+def legal_page(title: str, body: str) -> str:
+    """Render a terms or privacy page.
+
+    Unfilled placeholders are highlighted rather than left as plain text, because a
+    terms page that quietly ships saying "FILL_IN" is worse than not having one.
+    """
+    rendered = markdown(body)
+    unfilled = "[[" in rendered
+    rendered = re.sub(
+        r"\[\[(.+?)\]\]",
+        lambda m: f'<span class="fillin">FILL IN &mdash; {m.group(1).strip()}</span>',
+        rendered,
+    )
+    warning = f'<div class="flag">{escape(FILL_IN_NOTE)}</div>' if unfilled else ""
+
+    return f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{escape(title)} &mdash; Neutral</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet"
+  href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono&display=swap">
+<style>{CSS}</style></head><body><div class="wrap legal">
+<div class="top">
+  <h1>Neutral</h1>
+  <div class="notice">{escape(BANNER)}</div>
+</div>
+<div class="rule"></div>
+<a class="back" href="/">&larr; Back</a>
+{warning}
+<h2>{escape(title)}</h2>
+<div class="prose">{rendered}</div>
+<div class="foot"><a href="/terms">Terms</a><a href="/privacy">Privacy</a></div>
+</div></body></html>
 """
