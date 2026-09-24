@@ -235,6 +235,35 @@ def _model():
     return _NLP
 
 
+def _repeat_mentions(prompt: str, found: list[Finding]) -> list[Finding]:
+    """Later mentions of a name already found: "Emily Carter", then just "Emily".
+
+    A statistical recogniser reliably catches the full name and often not the short form
+    that follows it. Left alone, the first mention is anonymised and the rest are not,
+    which defeats the mechanism entirely - the model still learns who it is reading about.
+
+    Only exact words taken from names already detected are matched, so this can never
+    introduce a name that was not found in the first place.
+    """
+    taken = [(f.span.start, f.span.end) for f in found]
+    words: set[str] = set()
+    for finding in found:
+        for word in finding.text.split():
+            bare = re.sub(r"['\u2019]s$|\.$", "", word)
+            if len(bare) >= 3 and bare[:1].isupper() and bare.lower() not in TITLES:
+                words.add(bare)
+
+    extra: list[Finding] = []
+    for word in sorted(words, key=len, reverse=True):
+        for match in re.finditer(rf"\b{re.escape(word)}(?:['\u2019]s)?\b", prompt):
+            start, end = match.start(), match.end()
+            if any(start < t_end and end > t_start for t_start, t_end in taken):
+                continue
+            taken.append((start, end))
+            extra.append(Finding(Span(start, end), match.group(0), "person_name"))
+    return extra
+
+
 def detect_names_local(prompt: str) -> list[Finding]:
     """Find personal names on this machine: no network call, no cost, a few milliseconds.
 
@@ -290,4 +319,5 @@ def detect_names_local(prompt: str) -> list[Finding]:
         taken.append((start, end))
         findings.append(Finding(Span(start, end), text, "person_name"))
 
+    findings.extend(_repeat_mentions(prompt, findings))
     return sorted(findings, key=lambda f: f.span.start)

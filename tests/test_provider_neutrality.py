@@ -17,8 +17,9 @@ import pytest
 
 from neutral import errors
 from neutral.adapters.base import Completion
+from neutral.conversation import Conversation, ask
 from neutral.detect import DetectedSpan, Detection
-from neutral.pipeline import preview, process
+from neutral.pipeline import process
 from neutral.web.page import page
 
 # Any vendor name. The point is that none of them belong in the interface, including the
@@ -77,7 +78,7 @@ class _Failing:
     def __init__(self, kind: str) -> None:
         self.kind = kind
 
-    def complete(self, prompt, *, system=None):
+    def complete(self, prompt, *, system=None, history=None):
         return Completion(
             text="",
             model=self.model,
@@ -95,7 +96,7 @@ class _Failing:
 class _Working:
     model = "some-vendor-model-1"
 
-    def complete(self, prompt, *, system=None):
+    def complete(self, prompt, *, system=None, history=None):
         return Completion(
             text="Person A should tighten their estimates.",
             model=self.model,
@@ -108,21 +109,13 @@ class _Working:
 
 
 class TestTheInterfaceNamesNobody:
-    def test_the_empty_page(self):
-        assert_no_vendor(page(), "the empty page")
+    def test_the_opening_page(self):
+        assert_no_vendor(page(), "the opening page")
 
-    def test_a_successful_result(self):
-        result = process(PROMPT, adapter=_Working())
-        assert_no_vendor(page(prompt=PROMPT, result=result), "a successful result page")
-
-    def test_the_preview_shown_when_no_model_is_connected(self):
-        result = preview(PROMPT)
-        rendered = page(
-            prompt=PROMPT,
-            result=result,
-            preview_note=errors.user_message(errors.NO_KEY),
-        )
-        assert_no_vendor(rendered, "the no-model-connected page")
+    def test_a_conversation_that_worked(self):
+        conversation = Conversation()
+        ask(conversation, PROMPT, _Working())
+        assert_no_vendor(page(conversation), "a working conversation")
 
     @pytest.mark.parametrize(
         "kind",
@@ -138,24 +131,23 @@ class TestTheInterfaceNamesNobody:
     )
     def test_every_error_kind_renders_without_a_vendor_name(self, kind):
         assert_no_vendor(errors.user_message(kind), f"the {kind} message")
-        assert_no_vendor(page(prompt=PROMPT, error=errors.user_message(kind)), kind)
+        assert_no_vendor(page(error=errors.user_message(kind)), kind)
 
-    def test_a_provider_error_never_reaches_the_page_verbatim(self):
+    def test_a_provider_error_never_reaches_the_conversation(self):
         """The failure this file exists to prevent."""
+        conversation = Conversation()
+        turn = ask(conversation, PROMPT, _Failing(errors.NO_CREDIT))
+
+        assert turn.failed
+        rendered = page(conversation)
+        assert_no_vendor(rendered, "the conversation after a provider error")
+        assert "no remaining credit" in rendered
+
+    def test_the_provider_wording_is_kept_for_logs_only(self):
+        """The raw text stays available for diagnostics; it just never reaches a page."""
         result = process(PROMPT, adapter=_Failing(errors.NO_CREDIT))
         assert result.error_kind == errors.NO_CREDIT
-
-        # The provider's own wording is kept for diagnostics...
         assert "anthropic" in (result.passthrough_reason or "").lower()
-
-        # ...but what the user is shown is rendered from the kind, not from that text.
-        rendered = page(
-            prompt=PROMPT,
-            result=preview(PROMPT),
-            preview_note=errors.user_message(result.error_kind),
-        )
-        assert_no_vendor(rendered, "the page after a provider error")
-        assert "no remaining credit" in rendered
 
 
 class TestTheNeutralTaxonomyIsComplete:

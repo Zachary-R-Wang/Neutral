@@ -48,6 +48,17 @@ class ModelAdapter(Protocol):
     name: str
     model: str
 
-    def complete(self, prompt: str, *, system: str | None = None) -> Completion:
-        """Send one prompt and return one answer."""
+    def complete(
+        self,
+        prompt: str,
+        *,
+        system: str | None = None,
+        history: list[tuple[str, str]] | None = None,
+    ) -> Completion:
+        """Send one prompt and return one answer.
+
+        `history` is the conversation so far, as (role, text) pairs with role "user" or
+        "assistant". A conversation is not one prompt: the model needs what came before
+        to answer what comes next.
+        """
         ...

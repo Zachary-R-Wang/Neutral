@@ -149,15 +149,22 @@ class AnthropicAdapter:
             kwargs["thinking"] = {"type": "adaptive"}
         return kwargs
 
-    def complete(self, prompt: str, *, system: str | None = None) -> Completion:
+    def complete(
+        self,
+        prompt: str,
+        *,
+        system: str | None = None,
+        history: list[tuple[str, str]] | None = None,
+    ) -> Completion:
         kwargs = self._request_kwargs()
         if system:
             kwargs["system"] = system
 
+        messages = [{"role": role, "content": text} for role, text in (history or [])]
+        messages.append({"role": "user", "content": prompt})
+
         try:
-            response = self._client.messages.create(
-                messages=[{"role": "user", "content": prompt}], **kwargs
-            )
+            response = self._client.messages.create(messages=messages, **kwargs)
         except anthropic.AuthenticationError:
             return Completion(
                 text="",

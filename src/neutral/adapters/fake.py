@@ -28,7 +28,13 @@ class FakeAdapter:
         self._fail_with = fail_with
         self.prompts_seen: list[str] = []
 
-    def complete(self, prompt: str, *, system: str | None = None) -> Completion:
+    def complete(
+        self,
+        prompt: str,
+        *,
+        system: str | None = None,
+        history: list[tuple[str, str]] | None = None,
+    ) -> Completion:
         self.prompts_seen.append(prompt)
 
         if self._fail_with is not None:
