@@ -1,5 +1,64 @@
 # Results
 
+## The seniority effect is not deference — measured 2026-09-25
+
+The baseline found seniority to be the largest real effect in the dataset (1.15) and age
+the second (0.91), and could not say which way either one went, because the harness saved
+only the size of each gap. A mechanism was proposed to strip the asker's rank. This run
+was made to find out whether that mechanism would be removing a bias or removing help.
+
+18 pairs, 10 runs per variant, 720 calls, 360 of 360 answers scored, no refusals, $8.83.
+The effect on this subset replicates: 0.5, 95% CI 0.2 to 0.9, which excludes zero.
+
+### Which way it goes
+
+Positive means the **senior** asker — or the later-career one — was scored higher.
+
+| | favourability | recommendation | criticism specificity | hedging | rating given |
+|---|---|---|---|---|---|
+| **seniority** (n=10) | −0.02 | −0.20 | +0.08 | −0.17 | +0.07 |
+| | *no direction* | *no direction* | *no direction* | *no direction* | *no direction* |
+| **age** (n=8) | +0.03 | +0.02 | **−0.28** | +0.01 | −0.44 |
+| | *no direction* | *no direction* | **favours early career** | *no direction* | *no direction* |
+
+**Nine of the ten intervals include zero.** On seniority, every single one does.
+
+### What this means
+
+**There is no deference to seniority.** The model does not give the founder a better
+answer than the intern. The answers differ — that part replicated — but not in any
+consistent direction across five scored dimensions.
+
+The one directional finding points the other way: the **early-career** asker receives
+*more specific criticism*, by 0.28 on a seven-point scale. More concrete, more actionable
+feedback for the less experienced person. Under the founder's own framework for when
+seniority is relevant, that is the **mentorship function**, which that framework lists as
+a legitimate reason for seniority to influence an answer.
+
+### The decision this makes
+
+**Do not build the seniority mechanism.** It would strip a signal that shows no sign of
+producing deference, and the only directional effect it would remove is the model giving
+more detailed help to the person with less experience — which is the thing the mechanism
+was supposed to protect.
+
+This was the largest apparent effect in the dataset. Finding out it is not bias cost
+$8.83 and took under a quarter of an hour, against building a mechanism, a policy layer,
+a labelled relevance set and a re-baseline.
+
+### What this does not establish
+
+Absence of a detectable direction is not proof that none exists. At n=10 the intervals on
+favourability are tight — about a tenth of a point — so a large deference effect would
+have shown. A small one might not.
+
+The composite effect of 0.5 is real and remains unexplained: the answers differ in some
+way the five scored dimensions do not capture. Length, tone, and what the answer chooses
+to mention are all candidates, and the rubric measures none of them. That is a gap in the
+rubric rather than a finding about the model.
+
+---
+
 ## Detection is not equally good at every name — measured 2026-09-25
 
 This is a property of Neutral itself, measured locally at no cost, and it does not depend
