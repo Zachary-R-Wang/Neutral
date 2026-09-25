@@ -380,12 +380,14 @@ def markdown(text: str) -> str:
     numbers: list[str] = []
 
     def close_lists() -> None:
+        # Items are held as raw text and formatted here rather than as each line arrives,
+        # so that bold or code spanning a wrapped line still comes out as one span.
         nonlocal bullets, numbers
         if bullets:
-            out.append("<ul>" + "".join(f"<li>{b}</li>" for b in bullets) + "</ul>")
+            out.append("<ul>" + "".join(f"<li>{inline(b)}</li>" for b in bullets) + "</ul>")
             bullets = []
         if numbers:
-            out.append("<ol>" + "".join(f"<li>{n}</li>" for n in numbers) + "</ol>")
+            out.append("<ol>" + "".join(f"<li>{inline(n)}</li>" for n in numbers) + "</ol>")
             numbers = []
 
     def inline(chunk: str) -> str:
@@ -429,7 +431,7 @@ def markdown(text: str) -> str:
             close_paragraph()
             if numbers:
                 close_lists()
-            bullets.append(inline(bullet.group(1)))
+            bullets.append(bullet.group(1))
             continue
 
         number = re.match(r"\d+[.)]\s+(.*)", stripped)
@@ -437,10 +439,19 @@ def markdown(text: str) -> str:
             close_paragraph()
             if bullets:
                 close_lists()
-            numbers.append(inline(number.group(1)))
+            numbers.append(number.group(1))
             continue
 
-        close_lists()
+        # A line under a list item that is not itself an item continues it. Without this
+        # a bullet wrapped across two source lines came out as a bullet followed by a
+        # stray paragraph, which is how the privacy page looked before anyone read it.
+        if bullets:
+            bullets[-1] += " " + stripped
+            continue
+        if numbers:
+            numbers[-1] += " " + stripped
+            continue
+
         paragraph.append(stripped)
 
     close_paragraph()

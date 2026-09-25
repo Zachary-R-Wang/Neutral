@@ -17,7 +17,7 @@ from neutral.adapters.base import Completion
 from neutral.conversation import Conversation, ask
 from neutral.core import Span, TransformRecord
 from neutral.web.legal import CONTACT, JURISDICTION, OPERATOR, PRIVACY, TERMS
-from neutral.web.page import page
+from neutral.web.page import markdown, page
 
 PROMPT = "Assess Emily Carter. She shipped the payments work."
 
@@ -222,6 +222,53 @@ def test_a_transform_record_renders_without_breaking_the_page():
     html = page(conversation)
     assert "<b>Emily</b>" not in html
     assert "&lt;b&gt;Emily&lt;/b&gt;" in html
+
+
+class TestMarkdownHandlesWrappedText:
+    """A list item written across two lines is one item, not an item and a stray line.
+
+    Found by reading the rendered privacy page. Model answers arrive as long single
+    lines so they never hit this, but anything hand-written in the repository does.
+    """
+
+    def test_a_wrapped_bullet_is_one_bullet(self):
+        html = markdown("- a bullet that carries on\n  onto a second line")
+        assert html == "<ul><li>a bullet that carries on onto a second line</li></ul>"
+
+    def test_a_wrapped_numbered_item_is_one_item(self):
+        html = markdown("1. a numbered item\n   continued here")
+        assert html == "<ol><li>a numbered item continued here</li></ol>"
+
+    def test_emphasis_spanning_the_wrap_still_renders(self):
+        html = markdown("- this is **bold\n  across a wrap** here")
+        assert "<strong>bold across a wrap</strong>" in html
+
+    def test_a_blank_line_still_ends_the_list(self):
+        html = markdown("- one\n\nA new paragraph.")
+        assert html == "<ul><li>one</li></ul><p>A new paragraph.</p>"
+
+    def test_a_heading_still_ends_the_list(self):
+        html = markdown("- one\n## Next")
+        assert html == "<ul><li>one</li></ul><h4>Next</h4>"
+
+    def test_the_privacy_pages_lists_come_out_whole(self):
+        """The bug as it appeared: every wrapped bullet split into its own one-item list.
+
+        Checked by shape rather than by looking for a suspicious pattern - prose between
+        two lists is ordinary on this page, so only the item counts say whether a bullet
+        survived its own line wrap.
+        """
+        rendered = markdown(PRIVACY)
+        counts = [items.count("<li>") for items in re.findall(r"<ul>(.*?)</ul>", rendered)]
+        assert counts == [3, 3, 4], (
+            f"the privacy page's lists came out as {counts}, expected [3, 3, 4]: "
+            f"three cases where a prompt goes out unchanged, three things in an account, "
+            f"four things that are not kept"
+        )
+
+    def test_two_separate_bullets_stay_separate(self):
+        html = markdown("- one\n- two")
+        assert html == "<ul><li>one</li><li>two</li></ul>"
 
 
 class TestTheLegalPages:
