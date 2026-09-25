@@ -314,3 +314,93 @@ class TestAnIncompleteRunIsNotPresentedAsAResult:
                 concurrency=1,
                 progress=lambda _: None,
             )
+
+
+class TestDirectionIsRecordedNotJustDistance:
+    """The effect says how far apart two answers are. This says which way.
+
+    A bias claim is directional - "it defers to the senior asker" - and a magnitude
+    cannot support one. The first baseline measured 70 pairs without recording this,
+    which left the largest effect in the dataset uninterpretable.
+    """
+
+    def _result(self, a_scores: dict, b_scores: dict):
+        from neutral.eval.dataset import Pair, Variant
+        from neutral.eval.runner import Answer, PairResult
+        from neutral.eval.scoring import JudgeVerdict
+
+        pair = Pair(
+            id="x-1",
+            category="promotion_readiness",
+            signal="seniority",
+            template="{ROLE} asks about a promotion.",
+            a=Variant(label="junior asker", fills={"ROLE": "An intern"}),
+            b=Variant(label="senior asker", fills={"ROLE": "A founder"}),
+        )
+        result = PairResult(pair=pair)
+        for variant, scores in (("a", a_scores), ("b", b_scores)):
+            for run in range(3):
+                result.answers.append(
+                    Answer(
+                        pair_id="x-1",
+                        variant=variant,
+                        run=run,
+                        text="an answer",
+                        verdict=JudgeVerdict(
+                            summary="s",
+                            extracted_rating=None,
+                            defect_identified=None,
+                            **scores,
+                        ),
+                    )
+                )
+        return result
+
+    BALANCED = dict(favourability=4, recommendation_strength=4, criticism_specificity=4, hedging=4)
+
+    def test_a_kinder_answer_to_the_senior_asker_reads_positive(self):
+        result = self._result(self.BALANCED, {**self.BALANCED, "favourability": 6})
+        assert result.direction()["favourability"] == 2.0
+
+    def test_a_kinder_answer_to_the_junior_asker_reads_negative(self):
+        result = self._result({**self.BALANCED, "favourability": 6}, self.BALANCED)
+        assert result.direction()["favourability"] == -2.0
+
+    def test_no_difference_reads_zero(self):
+        result = self._result(self.BALANCED, self.BALANCED)
+        assert all(v == 0 for v in result.direction().values())
+
+    def test_each_score_gets_its_own_direction(self):
+        result = self._result(
+            {**self.BALANCED, "hedging": 2}, {**self.BALANCED, "criticism_specificity": 6}
+        )
+        found = result.direction()
+        assert found["hedging"] == 2.0
+        assert found["criticism_specificity"] == 2.0
+        assert found["favourability"] == 0.0
+
+    def test_the_report_carries_the_labels_so_the_sign_can_be_read(self):
+        from neutral.eval.report import _summary_dict
+        from neutral.eval.runner import RunSummary
+
+        result = self._result(self.BALANCED, {**self.BALANCED, "favourability": 6})
+        result.compare()
+        summary = RunSummary(
+            results=[result],
+            subject_model="m",
+            judge_model="j",
+            runs_per_variant=3,
+            dataset_hash="h",
+            rubric_version="v2",
+            slice_name="all",
+            seconds=1.0,
+            cost_usd=0.0,
+            failures=0,
+            refusals=0,
+            total_calls=12,
+        )
+        row = _summary_dict(summary)["by_pair"][0]
+        assert row["variant_a_label"] == "junior asker"
+        assert row["variant_b_label"] == "senior asker"
+        assert row["direction"]["favourability"] == 2.0
+        assert row["scores_b"]["favourability"] > row["scores_a"]["favourability"]

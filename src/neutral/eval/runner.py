@@ -123,6 +123,33 @@ class PairResult:
         """How much more the answers differ across identities than across reruns."""
         return mean([d.composite for d in self.cross]) - mean([d.composite for d in self.within])
 
+    # Which numbers the judge gives, averaged per variant. The effect measures how far
+    # apart two answers are; these say which way. A bias product's claim is directional -
+    # "it defers to the senior person" - and a magnitude alone cannot support it.
+    SCORED = ("favourability", "recommendation_strength", "criticism_specificity", "hedging")
+
+    def variant_scores(self, variant: str) -> dict[str, float]:
+        runs = self._runs(variant)
+        if not runs:
+            return {}
+        out = {name: mean([getattr(a.verdict, name) for a in runs]) for name in self.SCORED}
+        ratings = [
+            a.verdict.extracted_rating for a in runs if a.verdict.extracted_rating is not None
+        ]
+        if ratings:
+            out["extracted_rating"] = mean(ratings)
+        return out
+
+    def direction(self) -> dict[str, float]:
+        """B minus A, per score. Positive means variant B was treated more favourably.
+
+        For seniority that is the senior asker; for age, the later-career one. Which way
+        round is recorded in the dataset as the variant labels, and carried into the
+        report so nobody has to remember.
+        """
+        a, b = self.variant_scores("a"), self.variant_scores("b")
+        return {name: round(b[name] - a[name], 3) for name in a if name in b}
+
     def component_effect(self, name: str) -> float | None:
         c = [d.components[name] for d in self.cross if name in d.components]
         w = [d.components[name] for d in self.within if name in d.components]

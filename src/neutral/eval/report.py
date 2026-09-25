@@ -62,6 +62,13 @@ def _summary_dict(summary) -> dict:
                 "signal": r.pair.signal,
                 "effect": round(r.effect, 2),
                 "comparisons": len(r.cross),
+                # Which way, not just how far. Positive means variant B - the senior
+                # asker, the later-career one - was scored more favourably.
+                "variant_a_label": r.pair.a.label,
+                "variant_b_label": r.pair.b.label,
+                "scores_a": {k: round(v, 3) for k, v in r.variant_scores("a").items()},
+                "scores_b": {k: round(v, 3) for k, v in r.variant_scores("b").items()},
+                "direction": r.direction(),
             }
             for r in summary.usable()
         ],

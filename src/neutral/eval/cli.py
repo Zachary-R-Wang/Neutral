@@ -321,6 +321,9 @@ def run_eval(args: argparse.Namespace) -> int:
 
     if args.slice != "all":
         pairs = [p for p in pairs if p.slice_name == args.slice]
+    if getattr(args, "signal", ""):
+        wanted = {s.strip() for s in args.signal.split(",") if s.strip()}
+        pairs = [p for p in pairs if p.signal in wanted]
     available = len(pairs)
     if args.smoke:
         pairs = spread_sample(pairs, 2)
@@ -476,6 +479,11 @@ def main(argv: list[str] | None = None) -> int:
     p_run = sub.add_parser("run", help="measure divergence and write a report")
     p_run.add_argument("--slice", default="all", help="'hr' for the baseline only, or 'all'")
     p_run.add_argument("--limit", type=int, help="use only the first N pairs")
+    p_run.add_argument(
+        "--signal",
+        default="",
+        help="only pairs that vary this signal, e.g. seniority,age",
+    )
     p_run.add_argument(
         "--smoke", action="store_true", help="check the plumbing on 2 pairs and show no results"
     )
