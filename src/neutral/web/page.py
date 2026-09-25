@@ -149,13 +149,12 @@ body{
   drop-shadow(0 0 6px var(--glow-1)) drop-shadow(0 0 18px var(--glow-2))}
 
 /* header -------------------------------------------------------------------- */
-.top{display:flex;align-items:center;gap:12px;padding-bottom:16px}
+.top{display:flex;align-items:center;gap:12px;padding-bottom:28px}
 .top h1{font-size:15px;font-weight:500;margin:0;letter-spacing:-.01em}
 .notice{display:flex;align-items:center;gap:7px;margin-left:auto;font-size:12px;
   color:var(--fg-2);letter-spacing:-.005em}
 .notice::before{content:"";width:5px;height:5px;border-radius:50%;
   background:var(--accent);flex:none}
-.rule{height:1px;background:var(--line);margin-bottom:28px}
 
 /* opening ------------------------------------------------------------------- */
 .opening{flex:1;display:flex;flex-direction:column;justify-content:center;
@@ -551,7 +550,6 @@ def page(conversation: Conversation | None = None, *, error: str = "") -> str:
   <div class="notice">{escape(BANNER)}</div>
   {reset}
 </div>
-<div class="rule"></div>
 {banner_error}
 {body}
 <div class="foot">
@@ -596,7 +594,6 @@ def legal_page(title: str, body: str) -> str:
   <h1>Neutral</h1>
   <div class="notice">{escape(BANNER)}</div>
 </div>
-<div class="rule"></div>
 <a class="back" href="/">&larr; Back</a>
 {warning}
 <h2>{escape(title)}</h2>
