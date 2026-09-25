@@ -1,0 +1,52 @@
+# Where Neutral runs when it is not running on your laptop.
+#
+# Two settings in here are load-bearing and easy to get wrong:
+#
+#   [[mounts]]              accounts.db lives on a volume, so it survives a deploy.
+#                           Without this every account vanishes on the next update,
+#                           with no error - people simply cannot sign in any more.
+#
+#   min_machines_running    kept at 1 so the link answers immediately. Letting it sleep
+#                           saves a few dollars a year and costs a cold start on the one
+#                           occasion that matters, which is somebody opening the link for
+#                           the first time.
+
+app = "neutralai"
+primary_region = "sjc"   # San Jose - nearest region to California
+
+[build]
+
+[env]
+  NEUTRAL_PUBLIC = "true"
+  NEUTRAL_ACCOUNTS_DB = "/data/accounts.db"
+
+# The disk that outlives deploys. Holds accounts.db and nothing else: no prompts, no
+# names, no API keys - see the reasoning in src/neutral/accounts.py.
+[[mounts]]
+  source = "neutral_data"
+  destination = "/data"
+  initial_size = "1gb"
+
+[http_service]
+  internal_port = 8080
+  force_https = true        # plain HTTP is redirected, never served
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 40
+    hard_limit = 80
+
+  # /health returns {"ok": true} and touches neither the database nor a model.
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "20s"
+    method = "GET"
+    path = "/health"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"         # Python plus the 15MB language model, with room to spare

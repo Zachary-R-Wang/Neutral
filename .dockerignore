@@ -1,0 +1,24 @@
+# Nothing in here reaches the server image.
+
+# The most important line in this file. .env holds a real API key, and the website does
+# not read it - every user brings their own. It has no business leaving this machine.
+.env
+.env.*
+
+# Real email addresses and password hashes. The server keeps its own on a volume.
+accounts.db
+accounts.db-*
+
+# Rebuilt inside the image, and a macOS virtualenv would not run on Linux anyway.
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# Evaluation output, some of which is large.
+reports/
+
+.git/
+.github/
+.DS_Store

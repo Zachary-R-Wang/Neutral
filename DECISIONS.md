@@ -5,6 +5,46 @@ minds. Newest first.
 
 ---
 
+## 2026-09-25 — Neutral runs on a rented machine, and why it cannot be a static site
+
+**The instruction.** Put the site on neutralai.app, and remove "a deployment pipeline"
+from the section 8 list. Both done, and section 8 is amended and dated.
+
+**Why a rented machine rather than file hosting.** A static host serves files; Neutral is
+a program that has to be running to answer anything. The detection, the policy gate, the
+rewrite, the call to the provider and the restoration all happen in response to a
+request. Beyond that, the reason is commercial rather than technical: what makes Neutral
+sellable to an employer is that it is a checkpoint their staff cannot route around. Ship
+it as JavaScript in each person's browser and it becomes a suggestion that anyone can
+switch off in developer tools, with no audit trail - which contradicts section 1, where
+the evidence, not the rewriting, is the product.
+
+**Fly.io, and the two settings that matter.**
+
+  * `[[mounts]]` puts accounts.db on a volume. Without it the database lives on the
+    container's own disk, which is replaced on every deploy - so every account would
+    disappear on the next update, with no error. People would simply stop being able to
+    sign in. This is the most common way a small deployment quietly loses data and it is
+    worth more than any other line in fly.toml.
+  * `min_machines_running = 1` keeps the machine awake. Letting it sleep saves a few
+    dollars a year and spends them on a cold start during the first ten seconds somebody
+    spends on the site, which is the worst possible moment.
+
+**What restarting costs, and why that is correct.** API keys live in memory, so a deploy
+or a restart signs everybody's *model* out - accounts survive, the key does not, and it
+has to be pasted again. That is the intended consequence of never storing a customer's
+credentials, not an oversight, and it is on the privacy page in those words.
+
+**What going live does not fix.** There is still no password reset and no rate limiting,
+both now named in section 8 as well as LIMITATIONS.md. A public sign-up form is where
+they start to matter, and neither should be mistaken for solved by the site being up.
+
+**What would change our minds.** If a pilot customer needs Neutral inside their own
+network, this is one container and one volume, and it moves to whatever they run. Nothing
+in the design depends on Fly.
+
+---
+
 ## 2026-09-25 — The model list is a convenience, never a restriction
 
 **What was wrong.** Every provider's list named models that were current when the file
