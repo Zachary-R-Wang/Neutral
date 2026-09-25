@@ -91,6 +91,7 @@ CSS = """
   --hold:hsl(4 62% 62%);
   /* The corner cut. One value so every octagon agrees. */
   --cut:6px;
+  --accent:hsl(272 62% 68%);
   --glow-1:hsl(272 60% 62% / .10);
   --glow-2:hsl(272 60% 62% / .05);
   --plane-foot:hsl(157 50% 3.5%);
@@ -150,7 +151,7 @@ body{
 .notice{display:flex;align-items:center;gap:7px;margin-left:auto;font-size:12px;
   color:var(--fg-3);letter-spacing:-.005em}
 .notice::before{content:"";width:5px;height:5px;border-radius:50%;
-  background:var(--amber);flex:none}
+  background:var(--accent);flex:none}
 .rule{height:1px;background:var(--line);margin-bottom:28px}
 
 /* opening ------------------------------------------------------------------- */
@@ -505,7 +506,7 @@ def _composer(*, opening: bool) -> str:
       placeholder="{escape(PLACEHOLDER) if opening else "Reply..."}"></textarea>
     <button type="submit">{label}</button>
   </div></div></div>
-  <p class="hint">Enter to send. Nothing is saved.</p>
+  <p class="hint">Nothing is saved.</p>
 </form>"""
 
 
