@@ -157,7 +157,7 @@ body{
 .top{display:flex;align-items:center;gap:12px;padding-bottom:16px}
 .top h1{font-size:15px;font-weight:500;margin:0;letter-spacing:-.01em}
 .notice{display:flex;align-items:center;gap:7px;margin-left:auto;font-size:12px;
-  color:var(--fg-3);letter-spacing:-.005em}
+  color:var(--fg-2);letter-spacing:-.005em}
 .notice::before{content:"";width:5px;height:5px;border-radius:50%;
   background:var(--accent);flex:none}
 .rule{height:1px;background:var(--line);margin-bottom:28px}
