@@ -22,7 +22,7 @@ import time
 from dataclasses import dataclass, field
 
 from neutral.accounts import Account
-from neutral.adapters.providers import PROVIDERS, default_model_for
+from neutral.adapters.providers import PROVIDERS, default_model_for, looks_like_model
 from neutral.conversation import Conversation
 
 COOKIE = "neutral_session"
@@ -62,7 +62,11 @@ class Session:
         self.account_id = account.id
         self.email = account.email
         self.provider = account.provider or "anthropic"
-        self.model = account.model or default_model_for(self.provider)
+        # A preference saved before the connect page learnt to refuse junk - an email
+        # address, a username - falls back to the default instead of being re-sent.
+        self.model = (
+            account.model if looks_like_model(account.model) else default_model_for(self.provider)
+        )
 
     def connect(self, provider: str, model: str, api_key: str) -> None:
         self.provider = provider

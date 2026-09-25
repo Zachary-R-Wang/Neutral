@@ -24,7 +24,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 
 from neutral import accounts, errors, mailer
 from neutral.accounts import AccountError
-from neutral.adapters.providers import PROVIDERS, build, label_for
+from neutral.adapters.providers import PROVIDERS, build, label_for, looks_like_model
 from neutral.conversation import Conversation, ask
 from neutral.throttle import RESET, SIGN_IN, SIGN_UP, Throttle, wait_message
 from neutral.web.access import (
@@ -399,9 +399,14 @@ async def connect(request: Request):
     provider = str(form.get("provider") or "anthropic")
     if provider not in PROVIDERS:
         provider = "anthropic"
-    # One list per provider, so the chosen one names its own field. A name typed into
-    # the free field wins over the pills, since typing it is the more deliberate act.
-    model = str(form.get("model_other") or "").strip() or str(form.get(f"model_{provider}") or "")
+    # One list per provider, so the chosen one names its own field.
+    picked = str(form.get(f"model_{provider}") or "")
+    # The free box counts only when its box was ticked. It used to win whenever it had
+    # anything in it, and a browser's autofill put the account email there - which then
+    # overrode the option the person had actually chosen. Autofill never ticks a box.
+    custom = str(form.get("custom_model") or "").strip()
+    use_custom = form.get("use_custom") == "on" and bool(custom)
+    model = custom if use_custom else picked
     api_key = str(form.get("api_key") or "").strip()
 
     def again(message: str):
@@ -414,6 +419,17 @@ async def connect(request: Request):
                 replacing=session.connected,
             ),
             key,
+        )
+
+    if use_custom and not looks_like_model(custom):
+        # Said out loud, never quietly swapped for the pill: silently replacing one
+        # choice with another is how this went wrong in the first place. The rejected
+        # text is not echoed back, since it may be somebody's email address.
+        model = picked
+        return again(
+            "What is in the custom model box does not look like a model name - they look "
+            "like gpt-6-astra or claude-sonnet-5. If your browser filled that box in by "
+            "itself, untick \u201cUse a model that is not listed\u201d."
         )
 
     if not api_key:

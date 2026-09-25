@@ -43,7 +43,7 @@ from datetime import UTC, datetime, timedelta
 from hashlib import scrypt, sha256
 from pathlib import Path
 
-from neutral.adapters.providers import PROVIDERS, default_model_for
+from neutral.adapters.providers import PROVIDERS, default_model_for, looks_like_model
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 DEFAULT_DB = ROOT / "accounts.db"
@@ -261,6 +261,13 @@ def set_model(db: sqlite3.Connection, account_id: int, provider: str, model: str
     if provider not in PROVIDERS:
         raise AccountError("Choose one of the listed models.")
     chosen = model.strip() or default_model_for(provider)
+    if not looks_like_model(chosen):
+        # Defence in depth: the connect page checks first, but nothing should be able to
+        # make an email address somebody's saved model.
+        raise AccountError(
+            "That does not look like a model name. Model names look like gpt-6-astra or "
+            "claude-sonnet-5."
+        )
     try:
         db.execute(
             "UPDATE accounts SET provider = ?, model = ? WHERE id = ?",

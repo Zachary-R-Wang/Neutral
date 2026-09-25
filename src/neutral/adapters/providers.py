@@ -20,6 +20,7 @@ and a base URL reaches all of them.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 import httpx
@@ -118,6 +119,26 @@ def price_of(model: str) -> tuple[float, float] | None:
     from neutral.adapters.anthropic_api import PRICING as ANTHROPIC_PRICING
 
     return ANTHROPIC_PRICING.get(model) or PRICING.get(model)
+
+
+_MODEL_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,99}$")
+
+
+def looks_like_model(name: str) -> bool:
+    """Whether a string could plausibly be a model identifier.
+
+    Written after a browser's autofill put the account holder's email address into the
+    custom model box, where it was sent to the provider as the model name, saved as their
+    preference, and put back into the box on every later visit.
+
+    Model identifiers have no spaces and no @, and in practice always carry a version
+    number or a separator - gpt-6-astra, grok-4.7, claude-sonnet-5, ft:my-tune. That last
+    rule is what catches a bare username like "jack", which autofill also produced.
+    """
+    name = (name or "").strip()
+    if not _MODEL_ID.match(name):
+        return False
+    return any(ch.isdigit() or ch in "-._:/" for ch in name)
 
 
 # Where each provider's key is read from when the evaluation harness measures it. The

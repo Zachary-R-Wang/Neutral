@@ -19,7 +19,7 @@ from fastapi.testclient import TestClient
 from neutral import accounts
 from neutral.accounts import COLUMNS, AccountError
 from neutral.adapters.base import Completion
-from neutral.adapters.providers import PROVIDERS
+from neutral.adapters.providers import PROVIDERS, looks_like_model
 from neutral.conversation import Conversation
 from neutral.web import app as app_module
 from neutral.web.sessions import Session, Sessions
@@ -371,7 +371,8 @@ class TestPickingAModel:
             data={
                 "provider": "openai",
                 "model_openai": "gpt-6-luna",
-                "model_other": "  ft:my-private-tune  ",
+                "use_custom": "on",
+                "custom_model": "  ft:my-private-tune  ",
                 "api_key": KEY,
             },
             follow_redirects=False,
@@ -379,24 +380,156 @@ class TestPickingAModel:
         client.post("/", data={"prompt": "Assess Ravi."}, follow_redirects=False)
         assert _Adapter.built == [("openai", KEY, "ft:my-private-tune")]
 
-    def test_a_typed_name_comes_back_in_the_field_rather_than_vanishing(self, client):
+    def test_a_custom_name_comes_back_ticked_rather_than_vanishing(self, client):
         _sign_up(client)
         client.post(
             "/connect",
-            data={"provider": "xai", "model_other": "grok-9-unreleased", "api_key": KEY},
+            data={
+                "provider": "xai",
+                "use_custom": "on",
+                "custom_model": "grok-9-unreleased",
+                "api_key": KEY,
+            },
             follow_redirects=False,
         )
-        assert 'value="grok-9-unreleased"' in client.get("/connect?change=1").text
+        page = client.get("/connect?change=1").text
+        assert 'value="grok-9-unreleased"' in page
+        assert 'name="use_custom" checked' in page
 
-    def test_leaving_the_free_field_empty_uses_the_pill_that_is_selected(self, client):
+    def test_an_empty_custom_box_uses_the_pill_that_is_selected(self, client):
         _sign_up(client)
         client.post(
             "/connect",
-            data={"provider": "xai", "model_xai": "grok-4.5", "model_other": "   ", "api_key": KEY},
+            data={
+                "provider": "xai",
+                "model_xai": "grok-4.5",
+                "use_custom": "on",
+                "custom_model": "   ",
+                "api_key": KEY,
+            },
             follow_redirects=False,
         )
         client.post("/", data={"prompt": "Assess Ravi."}, follow_redirects=False)
         assert _Adapter.built == [("xai", KEY, "grok-4.5")]
+
+
+class TestAutofillCannotChooseTheModel:
+    """The bug as it happened on the live site, 2026-09-25.
+
+    The connect page has a text box followed by a password box, which browsers take to be
+    a username and password. The founder's browser filled their email into the custom
+    model box, and because that box used to win whenever it had anything in it, the email
+    was sent to the provider as the model name - over the option they had actually
+    picked. It was then saved as their preference and put back into the box on every
+    later visit. A second account had "jack" saved the same way.
+    """
+
+    EMAIL_IN_BOX = "zachary.wang1@sisyphus.website"
+
+    def test_an_autofilled_box_that_was_never_ticked_is_ignored(self, client):
+        """The failure exactly: box filled by the browser, box not ticked."""
+        _sign_up(client)
+        client.post(
+            "/connect",
+            data={
+                "provider": "anthropic",
+                "model_anthropic": "claude-sonnet-5",
+                "custom_model": self.EMAIL_IN_BOX,
+                "api_key": KEY,
+            },
+            follow_redirects=False,
+        )
+        client.post("/", data={"prompt": "Assess Ravi."}, follow_redirects=False)
+        assert _Adapter.built == [("anthropic", KEY, "claude-sonnet-5")]
+
+    @pytest.mark.parametrize("junk", [EMAIL_IN_BOX, "jack", "two words", "a@b"])
+    def test_a_ticked_box_holding_something_that_is_not_a_model_is_refused(self, client, junk):
+        _sign_up(client)
+        got = client.post(
+            "/connect",
+            data={
+                "provider": "anthropic",
+                "model_anthropic": "claude-sonnet-5",
+                "use_custom": "on",
+                "custom_model": junk,
+                "api_key": KEY,
+            },
+            follow_redirects=False,
+        )
+        assert got.status_code == 200, "it should stay on the page and explain"
+        assert "does not look like a model name" in got.text
+        assert _Adapter.built == []
+        # And the rejected text is not echoed back - it may be somebody's email.
+        assert junk not in got.text.split("<form", 1)[1]
+
+    def test_a_refused_name_is_never_saved(self, client):
+        _sign_up(client)
+        client.post(
+            "/connect",
+            data={
+                "provider": "anthropic",
+                "use_custom": "on",
+                "custom_model": self.EMAIL_IN_BOX,
+                "api_key": KEY,
+            },
+            follow_redirects=False,
+        )
+        raw = sqlite3.connect(client.db_path)
+        saved = raw.execute("SELECT model FROM accounts").fetchone()[0]
+        assert "@" not in saved
+
+    def test_a_junk_preference_saved_before_this_fix_falls_back_to_the_default(self, client):
+        """Both affected accounts on the live site are in this state."""
+        _sign_up(client)
+        raw = sqlite3.connect(client.db_path)
+        raw.execute("UPDATE accounts SET model = ?", (self.EMAIL_IN_BOX,))
+        raw.commit()
+        client.post("/signout", follow_redirects=False)
+        client.post("/signin", data={"email": EMAIL, "password": PASSWORD})
+
+        page = client.get("/connect").text
+        form = page.split("<form", 1)[1]
+        assert self.EMAIL_IN_BOX not in form, "the junk was put back into the box"
+        assert 'name="use_custom" checked' not in form
+        assert 'value="claude-opus-5-5"\n          checked' in form or re.search(
+            r'value="claude-opus-5-5"\s*checked', form
+        )
+
+    def test_the_account_store_itself_refuses_one(self, db):
+        account = accounts.create(db, EMAIL, PASSWORD)
+        with pytest.raises(AccountError, match="does not look like a model"):
+            accounts.set_model(db, account.id, "anthropic", self.EMAIL_IN_BOX)
+
+    def test_both_boxes_tell_password_managers_they_are_not_a_login(self, client):
+        _sign_up(client)
+        page = client.get("/connect").text
+        for field in ('id="custom_model"', 'id="api_key"'):
+            tag = page[page.index(field) - 5 : page.index(field) + 400]
+            tag = tag[: tag.index(">")]
+            assert "data-1p-ignore" in tag and 'autocomplete="off"' in tag, field
+
+
+class TestWhatCountsAsAModelName:
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "gpt-6-astra",
+            "claude-opus-5-5",
+            "grok-4.7",
+            "deepseek-flash",
+            "gemini-3.8-flash",
+            "ft:my-private-tune",
+            "models/gemini-3.1-pro-preview",
+        ],
+    )
+    def test_real_model_names_pass(self, name):
+        assert looks_like_model(name)
+
+    @pytest.mark.parametrize(
+        "name", ["zachary.wang1@sisyphus.website", "jack", "", "   ", "two words-1", "-x"]
+    )
+    def test_things_that_are_not_model_names_do_not(self, name):
+        assert not looks_like_model(name)
 
 
 class TestSigningInAndOut:

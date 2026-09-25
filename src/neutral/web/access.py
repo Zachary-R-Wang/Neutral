@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 from html import escape
 
-from neutral.adapters.providers import ORDER, PROVIDERS
+from neutral.adapters.providers import ORDER, PROVIDERS, looks_like_model
 from neutral.invariants import BANNER
 from neutral.web.legal import CONTACT
 from neutral.web.page import CORNER, CSS
@@ -40,8 +40,32 @@ MODEL_JS = """
     r.addEventListener('change', show);
   });
   show();
+
+  // The free model box only exists while it is ticked for. Hidden and disabled
+  // otherwise: a disabled field is not autofilled and is not sent.
+  var tick = document.getElementById('use_custom');
+  var wrap = document.getElementById('custom_wrap');
+  var field = document.getElementById('custom_model');
+  function custom(){
+    var on = !!(tick && tick.checked);
+    if(wrap) wrap.hidden = !on;
+    if(field){ field.disabled = !on; if(on) field.focus(); }
+  }
+  if(tick){ tick.addEventListener('change', custom); }
+  if(wrap) wrap.hidden = !(tick && tick.checked);
+  if(field) field.disabled = !(tick && tick.checked);
 })();
 """
+
+
+# The connect page has a text box followed by a password box, which is exactly what a
+# browser takes to be a username and password - so it filled the saved email into the
+# model box. autocomplete="off" is ignored in that position, so every hint that exists is
+# given, and none of them is relied on: the server ignores the box unless it was ticked.
+_NOT_A_LOGIN = (
+    'autocomplete="off" autocapitalize="off" spellcheck="false" '
+    'data-1p-ignore data-lpignore="true" data-bwignore data-form-type="other"'
+)
 
 
 def _host(url: str) -> str:
@@ -86,9 +110,11 @@ def _field(
     note: str = "",
     autofocus: bool = False,
     autocomplete: str = "",
+    not_a_login: bool = False,
 ) -> str:
     attrs = [
         f'type="{kind}"',
+        *([_NOT_A_LOGIN] if not_a_login else []),
         f'name="{name}"',
         f'value="{escape(value, quote=True)}"',
         f'placeholder="{escape(placeholder, quote=True)}"',
@@ -304,7 +330,13 @@ def _models_field(selected_provider: str, selected_model: str) -> str:
     a custom deployment or a fine-tune would never find themselves on it.
     """
     known = {name for spec in PROVIDERS.values() for name in spec.models}
-    typed = selected_model if selected_model and selected_model not in known else ""
+    # Only a saved custom model that could plausibly be one is offered back. The first
+    # version put back whatever had been saved - which, after autofill, was an email.
+    custom = (
+        selected_model
+        if selected_model and selected_model not in known and looks_like_model(selected_model)
+        else ""
+    )
 
     rows = []
     for key in ORDER:
@@ -329,11 +361,16 @@ def _models_field(selected_provider: str, selected_model: str) -> str:
     return f"""<div class="field">
   <label>Model</label>
   {"".join(rows)}
-  <label class="or" for="model_other">or type any model name your provider accepts</label>
-  <div class="glow"><div class="oct edge on-light"><div class="oct pad">
-    <input id="model_other" name="model_other" type="text" autocomplete="off"
-      value="{escape(typed, quote=True)}" placeholder="Leave empty to use the choice above">
-  </div></div></div>
+  <label class="tick" for="use_custom">
+    <input type="checkbox" id="use_custom" name="use_custom"{" checked" if custom else ""}>
+    Use a model that is not listed
+  </label>
+  <div class="custom" id="custom_wrap">
+    <div class="glow"><div class="oct edge on-light"><div class="oct pad">
+      <input id="custom_model" name="custom_model" type="text" {_NOT_A_LOGIN}
+        value="{escape(custom, quote=True)}" placeholder="e.g. gpt-6-sol, or a fine-tune id">
+    </div></div></div>
+  </div>
 </div>"""
 
 
@@ -361,7 +398,7 @@ def connect_page(
         kind="password",
         placeholder="Paste your key",
         note=key_note,
-        autocomplete="off",
+        not_a_login=True,
     )
     body = f"""<div class="card wide-card">
   <h2>{escape(heading)}</h2>

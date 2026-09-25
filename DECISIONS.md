@@ -5,6 +5,42 @@ minds. Newest first.
 
 ---
 
+## 2026-09-25 — The custom model box counts only when it is ticked
+
+**What happened.** The founder picked a model from the list on the live site and got
+"does not recognise that model name". The model actually sent was their email address.
+Their browser had autofilled it into the "or type any model name" box: that box sits
+just above the API key box, a password field, and browsers read a text box followed by a
+password box as a username and password. `autocomplete="off"` was already set, and
+browsers ignore it in exactly that position.
+
+It compounded. Anything in the free box used to win over the option picked, so the email
+overrode their choice. It was then saved as their model preference, and the connect page
+put a saved custom model back into the box on every visit - so it was re-sent however
+many times they chose again. A second account on the site had `jack` saved the same way.
+
+**The fix does not depend on the browser.** The free box now sits behind a tick box,
+"Use a model that is not listed", and the server ignores it unless that was ticked.
+Autofill does not tick boxes. With scripts on, the box is also hidden and disabled until
+ticked, and a disabled field is neither autofilled nor sent. Every password-manager hint
+that exists is set as well, but nothing relies on them.
+
+**Junk is refused out loud.** A ticked box holding something that cannot be a model name
+- no @, no spaces, and in practice always a digit or a separator, which is what catches
+`jack` - gets an error on the page rather than being quietly replaced with the pill.
+Silently swapping one choice for another is how this went wrong. The rejected text is not
+echoed back, since it may be somebody's email.
+
+**The two affected accounts are repaired without touching the database.** A saved
+preference that fails the same check falls back to the provider's default when the
+person signs in, and is overwritten the next time they connect.
+
+**What it cost.** The email was sent to the founder's own model provider once per
+attempt, inside a rejected request, and appears in the server's log lines for those
+attempts. Nothing about any prompt or anyone in one was involved.
+
+---
+
 ## 2026-09-25 — Password reset and rate limiting, on the day the site went up
 
 **The instruction.** Fix the two gaps that had been named in LIMITATIONS.md for days and

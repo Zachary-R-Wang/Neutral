@@ -334,10 +334,18 @@ button.wide{width:100%;justify-content:center;padding:12px 17px;font-size:14px;
   font-size:12px;padding:8px 11px;letter-spacing:-.01em}
 .field .or{display:block;font-size:12px;color:var(--fg-3);margin:13px 0 6px;
   letter-spacing:-.005em}
+/* The tick box that has to be ticked before the free model box counts. Sized
+   explicitly: `.field input` sets width:100%, which is what stretched the hidden radio
+   buttons across the page once before. */
+.field .tick{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--fg-2);
+  margin:14px 0 8px;cursor:pointer;width:fit-content}
+.field .tick input{width:14px;height:14px;margin:0;padding:0;flex:none;
+  accent-color:var(--solid);cursor:pointer}
+.field .custom[hidden]{display:none}
 /* The free model field is optional and takes the same kind of string as the pills, so it
    is set in the same face and sits a little lighter than the key field below it, which
    is not optional. */
-.field input#model_other{font-family:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,
+.field input#custom_model{font-family:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,
   monospace;font-size:12.5px;padding:8px 0}
 /* who is signed in, in the header */
 .top.tight{padding-bottom:13px}
