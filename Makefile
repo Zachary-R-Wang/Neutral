@@ -34,7 +34,7 @@ help:
 
 dev: .venv
 	@$(UV) sync --extra dev --quiet
-	@$(RUN) -m neutral.eval.cli doctor --offline
+	@$(RUN) -m neutral.eval.cli doctor --offline --web
 	@echo ""
 	@echo "  Starting Neutral at http://127.0.0.1:8000  (press Ctrl-C to stop)"
 	@echo ""

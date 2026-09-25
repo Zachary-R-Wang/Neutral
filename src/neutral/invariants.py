@@ -10,6 +10,8 @@ warnings. Nothing in this module downgrades a violation to a log line.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+
 from neutral.core import COMPARISON_FRAMING, NeutralResult, Segment, SegmentKind, render
 
 
@@ -266,6 +268,81 @@ def verify_no_identifying_data_persisted(
                 "identifying data was written to storage with AUDIT_RETAIN unset",
                 f"Found {identifier!r} in the record that was about to be persisted. "
                 f"With AUDIT_RETAIN unset, nothing identifying is written to disk.",
+            )
+
+
+# Column names that would mean the account table had started holding something it must
+# not. Checked as whole words, so "model" is fine and "api_key" is not.
+FORBIDDEN_COLUMNS = frozenset(
+    {
+        "api_key",
+        "apikey",
+        "key",
+        "secret",
+        "token",
+        "credential",
+        "credentials",
+        "password_plain",
+        "prompt",
+        "prompts",
+        "message",
+        "messages",
+        "answer",
+        "response",
+        "turn",
+        "turns",
+        "conversation",
+        "name",
+        "full_name",
+        "real_name",
+    }
+)
+
+
+def verify_account_store_columns(columns: Iterable[str]) -> None:
+    """S5. The account table may not gain a column for a credential or for prompt text.
+
+    Accounts were added on 2026-09-24 and S5 was clarified at the same time: the account
+    holder's own login may be stored, everything about the people inside a prompt may not,
+    and the API key is not stored at all. That distinction only holds as long as the table
+    stays this shape, so the shape is the test.
+    """
+    found = {str(column).strip().lower() for column in columns}
+    offending = sorted(found & FORBIDDEN_COLUMNS)
+    if offending:
+        raise InvariantViolation(
+            "S5",
+            f"the account table has a column it must not have: {', '.join(offending)}",
+            "The account table holds an email, a password hash and a model preference. "
+            "It never holds an API key, a prompt, or anyone named in one. If a key needs "
+            "to persist, it belongs in a secrets manager the customer runs, referenced by "
+            "a handle - not in a column here.",
+        )
+
+
+def verify_nothing_identifying_on_disk(
+    written: bytes,
+    identifiers: Iterable[str],
+    *,
+    audit_retain: bool = False,
+) -> None:
+    """S5. Read back what actually landed on disk and assert none of these are in it.
+
+    The difference between this and verify_no_identifying_data_persisted is that this one
+    takes bytes off the filesystem rather than an object on its way there. Something can
+    be correct on the way in and still end up in a write-ahead log, a free page, or a
+    string literal, and this is the check that would notice.
+    """
+    if audit_retain:
+        return
+
+    for identifier in identifiers:
+        if identifier and identifier.encode() in written:
+            raise InvariantViolation(
+                "S5",
+                f"{identifier!r} was found in a file on disk",
+                "With AUDIT_RETAIN unset, nothing identifying is written to disk - not "
+                "prompt text, not anyone named in a prompt, and never an API key.",
             )
 
 

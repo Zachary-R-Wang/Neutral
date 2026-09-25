@@ -7,6 +7,33 @@ before the numbers arrive is a design note; one added afterwards looks like an e
 
 ---
 
+## You have to paste your API key every session
+
+The key is held in memory and discarded when the server stops or the session goes idle for
+eight hours. Nothing is stored, which is the point — but it means a real pilot user
+re-enters a key more often than they would like, and a server restart signs everyone's
+model connection out even though their account survives.
+
+**What would fix it.** For a customer who already runs a secrets manager, a handle to a
+secret they control rather than the secret itself. That is a real integration, not a
+column in this database.
+
+## Accounts are the thinnest possible version
+
+There is no password reset, no email verification, and no way to change an email address.
+Someone who forgets their password cannot get back in, and nothing stops a person signing
+up with an address that is not theirs. This is fine for a demonstration and is not fine
+for a customer; it is listed here so that nobody discovers it during a pilot.
+
+There is also no organisation, no roles and no sharing. Two colleagues at the same
+employer have two unrelated accounts and cannot see each other's work.
+
+## Nothing is rate limited
+
+An account can send as many prompts as the model provider will accept. Since the prompts
+go out on the user's own key and bill to their own account, the cost lands on them rather
+than on us — but there is no protection against a script hammering the sign-in form.
+
 ## The seed dataset was written by a language model
 
 The 60 matched pairs in `datasets/v1` were drafted by Claude during development, then

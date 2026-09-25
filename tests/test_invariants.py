@@ -19,7 +19,9 @@ The file has two halves, and the difference matters when you read the output:
 from __future__ import annotations
 
 import pytest
+from fastapi.testclient import TestClient
 
+from neutral import accounts
 from neutral.adapters.base import Completion
 from neutral.core import (
     COMPARISON_FRAMING,
@@ -34,6 +36,7 @@ from neutral.detect import DetectedSpan, Detection
 from neutral.invariants import (
     BANNER,
     InvariantViolation,
+    verify_account_store_columns,
     verify_banner_present,
     verify_both_responses_present,
     verify_every_transformation_logged,
@@ -41,11 +44,14 @@ from neutral.invariants import (
     verify_identity_map_discarded,
     verify_no_added_information,
     verify_no_identifying_data_persisted,
+    verify_nothing_identifying_on_disk,
     verify_refusal_returned_verbatim,
     verify_result_adds_nothing,
     verify_safety_relevant_prompt_untouched,
 )
 from neutral.pipeline import process
+from neutral.web import app as web_app
+from neutral.web.sessions import Sessions
 
 pytestmark = pytest.mark.invariant
 
@@ -251,6 +257,94 @@ class TestS5EnforcementWorks:
     def test_allows_retention_only_behind_the_explicit_flag(self):
         record = {"prompt": ORIGINAL}
         verify_no_identifying_data_persisted(record, ["Priya Raman"], audit_retain=True)
+
+
+class _SilentAdapter:
+    """Answers without a network, so the S5 disk check needs no key and no credit."""
+
+    def complete(self, prompt, *, system="", history=()):
+        return Completion(text="Person A is ready for promotion.", model="stand-in")
+
+
+class TestS5HoldsNowThatAccountsExist:
+    """S5 - the storage boundary that arrived with accounts on 2026-09-24.
+
+    Accounts mean Neutral writes to disk for the first time. S5 was clarified rather than
+    weakened: the account holder's own login may be stored, nothing about the people
+    inside a prompt may be, and the API key is not stored at all.
+
+    The last test here is the one that matters. It runs a real conversation through the
+    real app and then reads the bytes of the database file, because a rule that is only
+    checked on the way in would not notice a write-ahead log or a leftover free page.
+    """
+
+    def test_the_real_account_table_has_no_column_it_should_not(self):
+        verify_account_store_columns(accounts.COLUMNS)
+
+    @pytest.mark.parametrize(
+        "added", ["api_key", "apikey", "token", "secret", "prompt", "conversation", "name"]
+    )
+    def test_a_column_for_a_credential_or_a_prompt_is_a_violation(self, added):
+        with pytest.raises(InvariantViolation) as caught:
+            verify_account_store_columns([*accounts.COLUMNS, added])
+        assert caught.value.invariant == "S5"
+
+    def test_the_declared_columns_are_the_ones_the_database_actually_makes(self, tmp_path):
+        """The declaration is only worth testing if it matches what gets created."""
+        db = accounts.connect(tmp_path / "accounts.db")
+        made = tuple(r["name"] for r in db.execute("PRAGMA table_info(accounts)"))
+        assert made == accounts.COLUMNS
+
+    def test_bytes_on_disk_are_checked_not_just_the_object(self):
+        verify_nothing_identifying_on_disk(b"provider=openai", ["Priya Raman"])
+        with pytest.raises(InvariantViolation) as caught:
+            verify_nothing_identifying_on_disk(b"...Priya Raman...", ["Priya Raman"])
+        assert caught.value.invariant == "S5"
+
+    def test_a_real_conversation_leaves_nothing_identifying_in_the_file(self, tmp_path):
+        """End to end, through the actual app: sign up, connect, ask, then read the file.
+
+        If somebody later adds a column that remembers a key, or starts logging prompts
+        to the account database, this is the test that fails.
+        """
+        key = "sk-ant-thiskeymustnevertouchthedisk"
+        prompt = "Assess whether Priya Raman is ready for promotion. I wrote her review."
+
+        monkey = pytest.MonkeyPatch()
+        try:
+            path = tmp_path / "accounts.db"
+            monkey.setenv("NEUTRAL_ACCOUNTS_DB", str(path))
+            monkey.setattr(web_app, "_db", None)
+            monkey.setattr(web_app, "sessions", Sessions())
+            monkey.setattr(
+                web_app,
+                "build",
+                lambda provider, api_key, model="", **kw: _SilentAdapter(),
+            )
+
+            client = TestClient(web_app.app)
+            client.post("/signup", data={"email": "hr@example.com", "password": "long-enough-pw"})
+            client.post(
+                "/connect",
+                data={
+                    "provider": "anthropic",
+                    "model_anthropic": "claude-sonnet-5",
+                    "api_key": key,
+                },
+            )
+            client.post("/", data={"prompt": prompt})
+        finally:
+            monkey.undo()
+
+        written = b"".join(
+            found.read_bytes() for found in tmp_path.glob("accounts.db*") if found.is_file()
+        )
+        verify_nothing_identifying_on_disk(
+            written,
+            [key, prompt, "Priya", "Raman", "Person A", "promotion"],
+        )
+        # Not vacuous: the account itself did get written.
+        assert b"hr@example.com" in written
 
 
 class TestS6EnforcementWorks:

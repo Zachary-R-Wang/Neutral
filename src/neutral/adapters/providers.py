@@ -77,6 +77,21 @@ PROVIDERS: dict[str, Provider] = {
     ),
 }
 
+ORDER = ("anthropic", "openai", "google", "xai")
+
+
+def default_model_for(provider: str) -> str:
+    """The model to use when the person has not picked one. Empty for an unknown key."""
+    spec = PROVIDERS.get(provider)
+    return spec.default_model if spec else ""
+
+
+def label_for(provider: str) -> str:
+    """What to call this provider in the interface."""
+    spec = PROVIDERS.get(provider)
+    return spec.label if spec else provider
+
+
 # Where the OpenAI-compatible adapter points for each provider that speaks that shape.
 _OPENAI_COMPATIBLE = {
     "openai": "https://api.openai.com/v1",

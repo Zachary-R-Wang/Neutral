@@ -270,6 +270,60 @@ button.ghost:hover{color:var(--fg-2);border-color:var(--line-2);opacity:1}
 .fillin{background:hsl(38 76% 62% / .16);border-bottom:1.5px solid var(--amber);
   padding:0 3px;border-radius:2px;font-weight:500}
 @media(max-width:640px){.opening h2{font-size:30px}.wrap{padding:16px 16px 24px}}
+
+/* accounts and the model picker ---------------------------------------------
+   Same octagon and same purple glow as the composer, because a sign-in page that
+   looks like it came from a different product is how a demo loses the room. */
+.card{flex:1;display:flex;flex-direction:column;justify-content:center;
+  padding-bottom:10vh;max-width:430px;margin:0 auto;width:100%}
+.card.wide-card{max-width:560px}
+.card h2{font-size:30px;font-weight:400;letter-spacing:-.04em;line-height:1.1;
+  margin:0 0 10px}
+.card>p.lede{color:var(--fg-2);margin:0 0 26px;font-size:14.5px}
+.field{margin-bottom:14px}
+.field>label{display:block;font-size:12.5px;color:var(--fg-2);margin-bottom:6px;
+  letter-spacing:-.005em}
+.field .pad{background:var(--panel);padding:2px 13px}
+.field input,.field select{width:100%;border:0;background:transparent;
+  color:var(--on-panel);font:inherit;font-size:14.5px;outline:none;padding:10px 0}
+.field input::placeholder{color:var(--on-panel-3)}
+.field select{cursor:pointer;padding-right:2px}
+.field .note{font-size:12.5px;color:var(--fg-2);margin:7px 2px 0;max-width:46em}
+.field .note a{color:var(--fg-2)}
+button.wide{width:100%;justify-content:center;padding:12px 17px;font-size:14px;
+  margin-top:6px}
+.alt{font-size:13px;color:var(--fg-3);margin:18px 0 0;text-align:center}
+.alt form{display:inline}
+.alt a{color:var(--fg-2);text-decoration:none;
+  border-bottom:1px solid var(--line-2)}
+.alt a:hover{color:var(--fg)}
+/* the provider choice, as a segmented row of octagons */
+.choice{display:flex;gap:7px;flex-wrap:wrap}
+.choice label{flex:1 1 0;min-width:88px;cursor:pointer}
+.choice input{position:absolute;opacity:0;pointer-events:none}
+.choice .pill{display:block;text-align:center;background:var(--panel);
+  border:1px solid var(--panel-line);padding:9px 6px;font-size:13.5px;
+  color:var(--on-panel-2);transition:border-color .12s,color .12s,background .12s;
+  clip-path:polygon(5px 0,calc(100% - 5px) 0,100% 5px,100% calc(100% - 5px),
+    calc(100% - 5px) 100%,5px 100%,0 calc(100% - 5px),0 5px)}
+.choice label:hover .pill{color:var(--on-panel);border-color:var(--line-2)}
+.choice input:checked+.pill{background:var(--solid);color:var(--on-solid);
+  border-color:var(--solid);font-weight:500}
+.choice input:focus-visible+.pill{outline:2px solid var(--accent);outline-offset:2px}
+/* one model list per provider; JS shows the one that matches the choice */
+.models[hidden]{display:none}
+/* who is signed in, in the header */
+.top.tight{padding-bottom:13px}
+.idbar{display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding-bottom:26px;
+  font-size:12px;color:var(--fg-3)}
+.idbar b{font-weight:500;color:var(--fg-2)}
+.idbar a{color:var(--fg-3);text-decoration:none;white-space:nowrap}
+.idbar a:hover{color:var(--fg-2)}
+.idbar form{display:inline;line-height:1}
+.idbar form:last-child{margin-left:auto}
+.notice{white-space:nowrap}
+.sep{color:var(--line-2)}
+@media(max-width:640px){.card h2{font-size:26px}}
 """
 
 
@@ -514,7 +568,37 @@ def _composer(*, opening: bool) -> str:
 </form>"""
 
 
-def page(conversation: Conversation | None = None, *, error: str = "") -> str:
+def _who(*, email: str, provider_label: str, model: str, reset: str = "") -> str:
+    """Who is signed in and which model they are sending to, with a way to change both.
+
+    The model is named in the header on purpose. A person who has connected their own
+    key should be able to see, without clicking anything, where their prompt is about to
+    go - and an investor watching should see that it is not always the same place.
+    """
+    if not email:
+        return ""
+    sending = (
+        f'<span class="sep">&middot;</span>'
+        f'<a href="/connect?change=1" title="Change model">{escape(provider_label)}'
+        f"{f' {escape(model)}' if model else ''}</a>"
+        if provider_label
+        else ""
+    )
+    return f"""<div class="idbar">
+  <b>{escape(email)}</b>{sending}
+  <form method="post" action="/signout"><button type="submit" class="ghost">Sign out</button></form>
+  {reset}
+</div>"""
+
+
+def page(
+    conversation: Conversation | None = None,
+    *,
+    error: str = "",
+    email: str = "",
+    provider_label: str = "",
+    model: str = "",
+) -> str:
     started = conversation is not None and conversation.started
 
     if started:
@@ -535,6 +619,7 @@ def page(conversation: Conversation | None = None, *, error: str = "") -> str:
         if started
         else ""
     )
+    who = _who(email=email, provider_label=provider_label, model=model, reset=reset)
 
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
@@ -545,11 +630,12 @@ def page(conversation: Conversation | None = None, *, error: str = "") -> str:
 <link rel="stylesheet"
   href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono&display=swap">
 <style>{CSS}</style></head><body>{CORNER}<div class="wrap">
-<div class="top">
+<div class="top{" tight" if who else ""}">
   <h1>Neutral</h1>
   <div class="notice">{escape(BANNER)}</div>
-  {reset}
 </div>
+{who}
+{reset if not who else ""}
 {banner_error}
 {body}
 <div class="foot">

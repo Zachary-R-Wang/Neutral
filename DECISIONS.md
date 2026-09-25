@@ -5,6 +5,64 @@ minds. Newest first.
 
 ---
 
+## 2026-09-24 — Accounts exist; API keys are still never stored
+
+**The instruction.** The founder asked for accounts and logins, and for a person to use
+their own API key against more than one model, "so that the MVP actually models the
+future enterprise and commercial version that can be presented to investors."
+
+**The conflict, stated rather than resolved quietly.** CLAUDE.md §8 forbade three things
+by name that this touches: user accounts, authentication, and an API key management
+system. §8 is scope, not safety — it is the founder's own earlier instruction, and a later
+written instruction from the same person replaces it. So this was built. What would have
+been wrong is building it and leaving the document saying the opposite, so §8 is amended
+and dated, and so is S5.
+
+**Multi-provider was never the conflicted part.** §4 has always required it: *"The model
+adapter is an interface. Neutral must work against more than one provider."* Until now
+that was an interface with one implementation, which proves nothing. Claude, OpenAI,
+Gemini and Grok now sit behind it, and a provider's own error wording still never reaches
+a person.
+
+**The line that was drawn, and why there.** Two stores, and everything follows from which
+side a thing is on.
+
+| | survives a restart | holds |
+|---|---|---|
+| `accounts.db` | yes | email, password hash, preferred model |
+| `web/sessions.py` | no | the conversation, and the API key |
+
+The API key is on the side that does not survive. A person pastes it once per session,
+it is held in a dictionary, and stopping the server erases it. The alternative was to
+store it — in the clear, or encrypted with a key sitting on the same disk, which is
+decoration. Neither belongs in front of an employer, and "we never store your key" is a
+stronger thing to say to an enterprise buyer than a convenience is worth. That is also
+why the connect page says where the key goes in ordinary type rather than small print.
+
+**Why this is not the thing §8 still forbids.** An API key management system stores,
+encrypts, rotates and syncs credentials. This stores none, because there is no column for
+one. `accounts.py` declares its complete column list and a test asserts the table has
+exactly those columns, so adding a "remember my key" convenience later is a build failure
+rather than a judgement call. Two further tests read the raw bytes of the database after a
+conversation and assert that the key, the prompt, and every name in the prompt are absent.
+
+**Passwords.** scrypt from the standard library, 16MB and about a tenth of a second per
+check, with the parameters recorded in each stored string so they can be raised later
+without invalidating anybody's password. No new dependency. A sign-in attempt for an
+address that does not exist hashes a dummy password anyway, so a missing account does not
+answer faster than a wrong one and reveal who has signed up.
+
+**What this does not add.** No organisations, no roles, no sharing, no password reset, no
+email verification, no billing. One person per account. Those are separate instructions if
+they are wanted.
+
+**What would change our minds.** If a pilot customer's security review demands stored
+keys, the answer is a secrets manager the customer already runs, referenced by handle —
+not a column in this database. If session-only keys prove too annoying in a real pilot,
+that is a finding to record, not a reason to store one quietly.
+
+---
+
 ## 2026-09-24 — A conversation costs one model call, not two
 
 **What was wrong.** Every message made two calls: the prompt as written, and the rewritten

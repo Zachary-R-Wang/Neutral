@@ -101,6 +101,24 @@ request and are discarded. Nothing identifying is written to disk unless an expl
 `AUDIT_RETAIN=true` flag is set, and even then the retention period is configurable and
 defaults to 24 hours.
 
+**Clarified 2026-09-24, when accounts were added.** S5 protects the people who appear
+*inside* a prompt — the employee being reviewed, who never agreed to any of this. Prompt
+text, and the identity map derived from it, are never written to disk. That is unchanged
+and absolute.
+
+It does not cover the account holder's own login. An email address and a password hash
+are stored, because otherwise an account cannot exist. The boundary is structural rather
+than a promise: `accounts.py` declares its complete column list, a test asserts the table
+has exactly those columns, and further tests read the raw database file after a
+conversation and assert that neither the prompt, nor any name in it, nor the API key
+appears anywhere in the bytes.
+
+**The API key is not stored at all.** It is held in memory for the session and is gone
+when the process stops. There is no column for one, and adding a column for one breaks a
+test. Storing a customer's model credentials would mean either holding them in the clear
+or encrypting them with a key sitting on the same disk, and neither is a thing to put in
+front of an employer.
+
 ### S6 — Not for live decisions
 
 The MVP displays a persistent banner: *evaluation use only — do not use this output as
@@ -275,9 +293,25 @@ author's. Subject to every constraint in §3.
 
 ## 8. Out of scope for the MVP
 
-Do not build: user accounts, authentication, billing, multi-tenancy, an admin dashboard,
-a browser extension, an API key management system, rate limiting, a marketing site, or a
-deployment pipeline. If a task seems to require one, it does not — say so and move on.
+Do not build: billing, multi-tenancy, an admin dashboard, a browser extension, an API
+key management system, rate limiting, a marketing site, or a deployment pipeline. If a
+task seems to require one, it does not — say so and move on.
+
+**Amended 2026-09-24, on the founder's written instruction**, which was to build accounts
+and logins and let a person use their own API key against more than one model, "so that
+the MVP actually models the future enterprise and commercial version that can be
+presented to investors."
+
+Accounts, sign-in and bring-your-own-key are therefore in scope. What that permits is
+narrow and is the whole of it: one `accounts` table, a password, an in-memory session, a
+provider picker, and a key that lives only in that session.
+
+The rest of the list means what it said. In particular **an API key management system is
+still forbidden** — storing, encrypting, rotating or syncing anyone's credentials — and
+the absence of a column for one is what enforces it. Multi-tenancy is still forbidden:
+there are no organisations, no roles and no sharing, only one person per account.
+
+Anything beyond that list is a new instruction, not an extension of this one.
 
 ---
 

@@ -56,14 +56,24 @@ def doctor(args: argparse.Namespace) -> int:
         print(f"{CROSS} Settings\n\n{exc}\n")
         return 1
 
+    # The website and the measurement need keys from different places, and confusing the
+    # two is how somebody concludes the product is broken when it is not. The website asks
+    # each person for their own key in the browser and never reads .env. `make eval` runs
+    # unattended against a fixed model, so that one does need a key on disk.
+    website_only = bool(getattr(args, "web", False))
+
     if (ROOT / ".env").exists():
         print(f"{TICK} .env file found")
+    elif website_only:
+        print(f"{TICK} No .env file, which is fine - the website asks for a key in the browser")
     else:
         print(f"{CROSS} No .env file")
         problems.append("Run: cp .env.example .env    then put your API key in it.")
 
     if settings.api_key_present:
         print(f"{TICK} API key present")
+    elif website_only:
+        print(f"{TICK} No API key on disk - you will paste one into the website when it opens")
     else:
         print(f"{CROSS} No API key in .env")
         problems.append(
@@ -88,7 +98,8 @@ def doctor(args: argparse.Namespace) -> int:
         print(f"{TICK} Dataset fingerprint: {dataset_hash(pairs)[:16]}")
     except DatasetError as exc:
         print(f"{CROSS} Dataset\n\n{exc}\n")
-        problems.append("Fix the dataset file named above.")
+        if not website_only:
+            problems.append("Fix the dataset file named above.")
 
     if settings.audit_retain:
         print(f"{WARN} AUDIT_RETAIN is on - identifying data will be written to disk")
@@ -108,7 +119,10 @@ def doctor(args: argparse.Namespace) -> int:
         print()
         return 1
 
-    print("Everything is ready. Run `make eval` to measure the baseline.")
+    if website_only:
+        print("Everything is ready.")
+    else:
+        print("Everything is ready. Run `make eval` to measure the baseline.")
     return 0
 
 
@@ -340,6 +354,11 @@ def main(argv: list[str] | None = None) -> int:
 
     p_doctor = sub.add_parser("doctor", help="check the project is ready to run")
     p_doctor.add_argument("--offline", action="store_true", help="skip the live API check")
+    p_doctor.add_argument(
+        "--web",
+        action="store_true",
+        help="checking before starting the website, where the key is entered in the browser",
+    )
     p_doctor.set_defaults(func=doctor)
 
     p_dataset = sub.add_parser("dataset", help="show the matched pairs")

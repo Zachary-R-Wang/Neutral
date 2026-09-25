@@ -15,3 +15,7 @@ __pycache__/
 
 # Generated evaluation output
 reports/
+
+# The account database. Holds real email addresses, so it never goes in the repository.
+accounts.db
+accounts.db-*
