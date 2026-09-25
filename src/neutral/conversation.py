@@ -33,11 +33,10 @@ from dataclasses import dataclass, field
 
 from neutral import errors
 from neutral.core import TransformRecord
-from neutral.detect import detect_names_local, find_pronouns
-from neutral.invariants import InvariantViolation, verify_no_added_information
-from neutral.mechanisms.identity_substitution import apply as substitute
-from neutral.policy import decide, safety_hold
+from neutral.invariants import InvariantViolation
+from neutral.policy import safety_hold
 from neutral.restore import restore
+from neutral.rewrite import rewrite
 
 # Chosen to contain no letters, so name detection cannot see a name across the join and no
 # substitution can ever land on it.
@@ -80,25 +79,18 @@ class Conversation:
 def _rewrite_all(prompts: list[str]) -> tuple[list[str], dict[str, str], dict[str, str], tuple]:
     """Rewrite every turn in one pass, so the placeholders agree across all of them.
 
-    Returns the rewritten prompts, the name map, the pronoun style, and the audit records
-    for the newest turn only - the earlier turns were already recorded when they happened.
+    Goes through neutral.rewrite, which is the same orchestrator the evaluation harness
+    measures. Returns the rewritten prompts, the map for putting the answer back, the
+    pronoun style, and the audit records for the newest turn only - the earlier turns
+    were already recorded when they happened.
     """
     joined = SEPARATOR.join(prompts)
+    done = rewrite(joined)
 
-    names = detect_names_local(joined)
-    findings = sorted(names + find_pronouns(joined, names), key=lambda f: f.span.start)
-    if not findings:
+    if not done.changed:
         return list(prompts), {}, {}, ()
 
-    decisions = decide(joined, findings)
-    allowed = {i for i, d in enumerate(decisions) if d.transform_allowed}
-    result = substitute(joined, findings, allowed)
-    rewritten = "".join(s.text for s in result.segments)
-
-    # The same S1 proof the single-prompt path runs, before anything is sent.
-    verify_no_added_information(joined, rewritten, result.segments)
-
-    parts = rewritten.split(SEPARATOR)
+    parts = done.processed.split(SEPARATOR)
     if len(parts) != len(prompts):
         # A split that does not line up means the separator was disturbed. Rather than
         # send something that might not correspond to what the user wrote, send nothing.
@@ -110,8 +102,8 @@ def _rewrite_all(prompts: list[str]) -> tuple[list[str], dict[str, str], dict[st
 
     # Only the final turn's changes are new; the rest were recorded when they were asked.
     last_start = len(SEPARATOR.join(prompts[:-1])) + (len(SEPARATOR) if len(prompts) > 1 else 0)
-    newest = tuple(r for r in result.transforms if r.source and r.source.start >= last_start)
-    return parts, result.identity_map, result.pronoun_style, newest
+    newest = tuple(r for r in done.transforms if r.source and r.source.start >= last_start)
+    return parts, done.restore_map, done.pronoun_style, newest
 
 
 def ask(conversation: Conversation, prompt: str, adapter) -> Turn:

@@ -7,6 +7,36 @@ before the numbers arrive is a design note; one added afterwards looks like an e
 
 ---
 
+## Neutral protects some people better than others
+
+Its name detection finds African and East Asian names about 18 percentage points less
+often than Hispanic or Slavic ones, measured over identical sentences where only the name
+changes. Neutral cannot remove a name it does not see, so on those prompts it does less
+of what it claims to do.
+
+This is the most uncomfortable thing in this file and it belongs at the top of it. A tool
+sold on reducing demographic bias has a component whose accuracy varies by exactly the
+thing it is meant to be blind to. The full table is in RESULTS.md.
+
+**What would fix it.** The gap is inherited from a general-purpose name recogniser, not
+written into this project. A detector trained on names from a wider range of traditions,
+or a model-based detector called per request, would close it. The second is already
+supported by the pipeline and costs money per prompt, which is why it is not the default.
+
+## Age and seniority are not handled at all
+
+Mechanism 1 substitutes names. Mechanism 3 neutralises who wrote the thing being assessed.
+Neither touches "a new manager of three months" or "I am 58" — there is no name and no
+authorship claim, so nothing fires. On the evaluation dataset that is 18 of 70 pairs, a
+quarter of it, where Neutral does nothing whatsoever.
+
+CLAUDE.md §1 promises to reduce bias from "race, gender, age, nationality or seniority".
+The four mechanisms in §7 cover names, ordering, grammatical person, and comparison
+framing. Age and seniority stated as self-description fall in the gap between the promise
+and the plan, and closing it is a decision about the product, not a missing function:
+often that context is load-bearing for the answer, which is what the relevance gate in
+Phase 2 exists to decide.
+
 ## The model lists will go stale again
 
 The models offered for each provider were checked against vendor documentation on

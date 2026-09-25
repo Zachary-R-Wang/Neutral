@@ -1,5 +1,76 @@
 # Results
 
+## Detection is not equally good at every name — measured 2026-09-25
+
+This is a property of Neutral itself, measured locally at no cost, and it does not depend
+on the evaluation run. **Neutral cannot remove a name it cannot see**, so wherever
+detection is weaker, the product protects that person less.
+
+Method: ten sentence frames used in real HR work — "Assess {name} for promotion", "Write
+a performance review for {name}" — with ten names per tradition drawn from the evaluation
+dataset. Identical sentences, only the name changes. The same matched-pair design the
+project uses on the model, pointed at its own detector.
+
+| naming tradition | names found |
+|---|---|
+| Hispanic / Latino | 100% |
+| Slavic | 99% |
+| Anglo | 97% |
+| South Asian | 97% |
+| Arabic / Middle Eastern | 92% |
+| **East Asian** | **84%** |
+| **African** | **82%** |
+
+An 18-point gap, on `en_core_web_lg`. It is not a Western-versus-everyone-else split:
+Anglo names are neither best nor worst, and South Asian names score the same as Anglo
+ones. The names detected worst are African and East Asian.
+
+### A correction
+
+An earlier note in this project's history said the missed names "skewed towards the
+non-Anglo ones". That was written from a handful of examples, before this was measured,
+and the measurement does not support it — in one configuration Anglo names tied for
+*worst*. The real finding is narrower and more useful: African and East Asian names are
+found 15 to 18 points less often than Hispanic or Slavic ones.
+
+### Choosing the detector, and a metric that lied
+
+Four detectors were compared on three things: how many of the seventy evaluation pairs
+come out byte-identical, whether either half of a pair is rewritten when the other is
+not, and how often something that is not a person gets replaced.
+
+| detector | pairs identical | invents a difference | worst tradition | false positives | memory |
+|---|---|---|---|---|---|
+| rules only | **46/70** | **0** | **100%** | 7 of 8 sentences | none |
+| `en_core_web_sm` | 40/70 | 5 | 74% | 1 of 8 | 142MB |
+| `en_core_web_md` | 43/70 | 1 | 84% | 0 of 8 | 337MB |
+| `en_core_web_lg` | 44/70 | 1 | 82% | **0 of 8** | 385MB |
+
+The rules-only fallback wins the first three columns and is unusable. It replaces "Human
+Resources", "Salesforce", "London" and "Employment Rights Act" with a person's
+placeholder.
+
+That is worth dwelling on, because **the headline metric could not see it**.
+Over-detection applies equally to both halves of a matched pair, so it cancels out of the
+convergence number entirely. A metric that improves when the product gets worse is the
+kind of thing this project exists to catch, and it was caught here only because a second
+measurement was run against it.
+
+`en_core_web_lg` was chosen: best on pairs, no false positives, uniform enough to state
+plainly where it is not. It needs 385MB, which is why the server was moved from 512MB to
+1GB.
+
+### Two near-misses in the measuring, both caught
+
+A missing spaCy model degrades to rules silently and on purpose, so that a web request
+never fails because of it. Twice, a comparison script reported the model it had *asked
+for* while one of the candidates had quietly fallen back to rules — which made two
+different configurations look identical and, the first time, inverted the conclusion
+entirely. `detect.active_detector()` now reports what is actually running, and every
+comparison here was re-run through it.
+
+---
+
 ## No baseline yet. One attempt made, and it is not usable.
 
 ### Attempt 1 — 2026-09-20, invalid

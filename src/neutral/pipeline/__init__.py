@@ -243,56 +243,27 @@ def process(
 def preview(prompt: str, *, comparison_framing: bool = False) -> NeutralResult:
     """Show what Neutral would send, without calling a model at all.
 
-    No network, no cost. This is the same detection, the same transform, the same policy
+    No network, no cost. This is the same detection, the same mechanisms, the same policy
     layer and the same S1 check that a real request goes through - the only thing missing
     is asking the model for an answer, which is the one step that cannot be done locally.
+
+    It runs neutral.rewrite, which is also what the web interface runs. That is
+    deliberate: a number the evaluation harness measures through here is a number about
+    the thing people actually use, not about a second implementation that drifted.
     """
-    hold = safety_hold(prompt)
-    if hold.held:
-        return NeutralResult(
-            original_prompt=prompt,
-            processed_prompt=prompt,
-            original_response="",
-            processed_response="",
-            segments=_whole(prompt),
-            decisions=tuple(decide(prompt, [])),
-            passthrough=True,
-            passthrough_reason=hold.reason,
-        )
+    from neutral.rewrite import rewrite
 
-    names = detect_names_local(prompt)
-    findings = sorted(names + find_pronouns(prompt, names), key=lambda f: f.span.start)
-    if not findings:
-        return NeutralResult(
-            original_prompt=prompt,
-            processed_prompt=prompt,
-            original_response="",
-            processed_response="",
-            segments=_whole(prompt),
-        )
-
-    decisions = decide(prompt, findings)
-    allowed = {i for i, d in enumerate(decisions) if d.transform_allowed}
-    substitution = substitute(prompt, findings, allowed)
-    processed_prompt = "".join(s.text for s in substitution.segments)
-
-    # The same S1 check the real path runs. A preview that could not be proved faithful
-    # would be showing something Neutral would never actually send.
-    verify_no_added_information(
-        prompt,
-        processed_prompt,
-        substitution.segments,
-        comparison_framing_enabled=comparison_framing,
-    )
-
+    done = rewrite(prompt, comparison_framing=comparison_framing)
     return NeutralResult(
         original_prompt=prompt,
-        processed_prompt=processed_prompt,
+        processed_prompt=done.processed,
         original_response="",
         processed_response="",
-        segments=substitution.segments,
-        transforms=substitution.transforms,
-        decisions=tuple(decisions),
+        segments=done.segments,
+        transforms=done.transforms,
+        decisions=done.decisions,
         mechanisms_enabled=DEFAULT_MECHANISMS,
+        passthrough=done.held,
+        passthrough_reason=done.held_reason,
         metadata={"preview": "true"},
     )

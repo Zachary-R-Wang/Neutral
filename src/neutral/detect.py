@@ -226,11 +226,24 @@ _NLP_FAILED = False
 # another can be measured rather than argued about - see RESULTS.md. Whatever is named
 # here must also be a declared dependency in pyproject.toml, or the next `uv sync` prunes
 # it and detection silently degrades to rules.
-DEFAULT_NER_MODEL = "en_core_web_md"
+DEFAULT_NER_MODEL = "en_core_web_lg"
 
 
 def ner_model_name() -> str:
+    """Which model was ASKED for. Not necessarily the one doing the work."""
     return os.environ.get("NEUTRAL_NER_MODEL", "").strip() or DEFAULT_NER_MODEL
+
+
+def active_detector() -> str:
+    """What is actually finding the names, having tried to load the model.
+
+    The difference between this and ner_model_name matters more than it looks. A missing
+    model degrades to rules silently and on purpose - a web request should not fail
+    because of it. But a comparison of detectors that reports the name it asked for,
+    while one of them quietly fell back to rules, measures the same thing twice and
+    reports it under two names. That happened, and it inverted the conclusion.
+    """
+    return ner_model_name() if _model() is not None else "rules-only"
 
 
 def _model():

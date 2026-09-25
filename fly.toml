@@ -49,4 +49,4 @@ primary_region = "sjc"   # San Jose - nearest region to California
 
 [[vm]]
   size = "shared-cpu-1x"
-  memory = "512mb"         # Python plus the 15MB language model, with room to spare
+  memory = "1gb"           # the name recogniser alone peaks at 385MB; 512mb was not enough

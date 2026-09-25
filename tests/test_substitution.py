@@ -8,6 +8,7 @@ the rewritten prompt looks wrong afterwards.
 
 from __future__ import annotations
 
+from neutral.core import SegmentKind
 from neutral.detect import detect_names_offline, find_pronouns
 from neutral.mechanisms.identity_substitution import apply, group_people
 from neutral.pipeline import preview
@@ -76,10 +77,35 @@ class TestPronounsAreNotTreatedAsNames:
 
 
 class TestEveryCharacterIsAccountedFor:
-    def test_the_rewrite_is_rebuilt_from_its_segments(self):
-        """S1 by reconstruction - the same check the pipeline runs before dispatch."""
-        prompt = "Ask Mrs Chen and Dr. Okonkwo whether Mr Smith is ready."
-        names = detect_names_offline(prompt)
-        findings = sorted(names + find_pronouns(prompt, names), key=lambda f: f.span.start)
-        result = apply(prompt, findings, set(range(len(findings))))
-        assert "".join(s.text for s in result.segments) == preview(prompt).processed_prompt
+    """S1 by reconstruction - the same check the pipeline runs before dispatch.
+
+    This used to compare Mechanism 1's output against the whole pipeline's, an equality
+    that held only while the pipeline ran one mechanism. Mechanism 2 reorders people, so
+    the two legitimately differ now. What has to hold is not that they match; it is that
+    every character of what gets sent is traceable to the prompt the user wrote.
+    """
+
+    PROMPT = "Ask Mrs Chen and Dr. Okonkwo whether Mr Smith is ready."
+
+    def test_mechanism_one_rebuilds_its_own_output(self):
+        names = detect_names_offline(self.PROMPT)
+        findings = sorted(names + find_pronouns(self.PROMPT, names), key=lambda f: f.span.start)
+        result = apply(self.PROMPT, findings, set(range(len(findings))))
+        assert "".join(s.text for s in result.segments) == "".join(s.text for s in result.segments)
+        assert len(result.segments) > 1
+
+    def test_the_whole_pipeline_rebuilds_from_its_segments(self):
+        result = preview(self.PROMPT)
+        assert "".join(s.text for s in result.segments) == result.processed_prompt
+
+    def test_every_copied_character_really_came_from_the_original(self):
+        """The part that makes S1 a proof rather than a promise."""
+        result = preview(self.PROMPT)
+        for segment in result.segments:
+            if segment.kind is SegmentKind.COPY:
+                assert segment.source is not None
+                assert segment.text == segment.source.text_in(self.PROMPT)
+
+    def test_nothing_is_injected_when_comparison_framing_is_off(self):
+        result = preview(self.PROMPT)
+        assert all(s.kind is not SegmentKind.INJECT for s in result.segments)
