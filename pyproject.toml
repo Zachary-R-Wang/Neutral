@@ -14,7 +14,14 @@ dependencies = [
     # Declared here rather than installed with `spacy download`. Anything uv does not
     # know about is pruned on the next sync, and losing this model does not fail
     # loudly - detection drops back to rules and quietly gets worse.
-    "en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl",
+    #
+    # The medium model rather than the small one, on measurement rather than taste. The
+    # small one missed enough names that on five of the seventy evaluation pairs it
+    # replaced one variant's name and not the other's - inventing a difference between
+    # two prompts that were supposed to end up identical, which is worse than doing
+    # nothing. The medium one gets that down to one. The large one is 560MB for a single
+    # pair more, and is worse on pronouns. See RESULTS.md.
+    "en-core-web-md @ https://github.com/explosion/spacy-models/releases/download/en_core_web_md-3.8.0/en_core_web_md-3.8.0-py3-none-any.whl",
 ]
 
 [project.optional-dependencies]

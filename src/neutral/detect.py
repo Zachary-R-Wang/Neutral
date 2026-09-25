@@ -18,6 +18,7 @@ detector hallucination from becoming an S1 violation.
 
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass
 
@@ -221,6 +222,17 @@ _NLP = None
 _NLP_FAILED = False
 
 
+# Which spaCy model finds the names. Overridable so that the accuracy of one against
+# another can be measured rather than argued about - see RESULTS.md. Whatever is named
+# here must also be a declared dependency in pyproject.toml, or the next `uv sync` prunes
+# it and detection silently degrades to rules.
+DEFAULT_NER_MODEL = "en_core_web_md"
+
+
+def ner_model_name() -> str:
+    return os.environ.get("NEUTRAL_NER_MODEL", "").strip() or DEFAULT_NER_MODEL
+
+
 def _model():
     """Load the local name recogniser once, or give up quietly and let rules take over."""
     global _NLP, _NLP_FAILED
@@ -229,7 +241,7 @@ def _model():
     try:
         import spacy
 
-        _NLP = spacy.load("en_core_web_sm")
+        _NLP = spacy.load(ner_model_name())
     except Exception:  # noqa: BLE001 - a missing model must degrade, never crash
         _NLP_FAILED = True
     return _NLP

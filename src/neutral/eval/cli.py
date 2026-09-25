@@ -215,9 +215,29 @@ def _adapters(settings: Settings):
     return subject, judge
 
 
+def neutral_transform(prompt: str) -> str:
+    """What Neutral would actually send for this prompt.
+
+    Uses pipeline.preview, which is the same detection, policy gate, substitution and S1
+    check a real request goes through - everything except asking the model. So this arm
+    measures the product as built, not an idealised version of it: a prompt the safety
+    gate holds is sent unchanged here exactly as it would be in the web interface.
+
+    Fails open to the original, as S4 requires. A rewriting that cannot be proved
+    faithful must not be sent, and the measurement has to reflect that rather than
+    quietly dropping the pair.
+    """
+    from neutral.pipeline import preview
+
+    try:
+        return preview(prompt).processed_prompt
+    except Exception:  # noqa: BLE001 - S4: fail open to the original, never to a mangle
+        return prompt
+
+
 def run_eval(args: argparse.Namespace) -> int:
     from neutral.eval.report import write_html, write_json
-    from neutral.eval.runner import estimate_run_cost, run_evaluation
+    from neutral.eval.runner import estimate_run_cost, no_transform, run_evaluation
     from neutral.eval.scoring import RUBRIC_VERSION
 
     settings = load_settings()
@@ -243,6 +263,8 @@ def run_eval(args: argparse.Namespace) -> int:
         f"\n  Pairs:            {len(pairs)}" + (f" of {available} (a sample)" if partial else "")
     )
     print(f"  Runs per variant: {runs}")
+    arm = "Neutral in the path" if args.with_neutral else "baseline (no Neutral)"
+    print(f"  Arm:              {arm}")
     print(f"  Model measured:   {settings.subject_model}")
     print(f"  Model scoring:    {settings.judge_model}")
     print(f"  API calls:        {calls}")
@@ -267,6 +289,14 @@ def run_eval(args: argparse.Namespace) -> int:
         print()
 
     subject, judge = _adapters(settings)
+
+    transform = no_transform
+    if args.with_neutral:
+        from neutral.detect import ner_model_name
+
+        print(f"  Detector:         {ner_model_name()}")
+        transform = neutral_transform
+
     summary = run_evaluation(
         pairs,
         subject,
@@ -278,6 +308,7 @@ def run_eval(args: argparse.Namespace) -> int:
         partial=partial,
         pairs_available=available,
         concurrency=settings.concurrency,
+        transform=transform,
     )
 
     answers = summary.total_calls // 2
@@ -376,6 +407,11 @@ def main(argv: list[str] | None = None) -> int:
         "--estimate", action="store_true", help="print the cost and exit without calling anything"
     )
     p_run.add_argument("--yes", action="store_true", help="skip the spend confirmation")
+    p_run.add_argument(
+        "--with-neutral",
+        action="store_true",
+        help="send prompts through Neutral first, instead of unchanged",
+    )
     p_run.set_defaults(func=run_eval)
 
     args = parser.parse_args(argv)
