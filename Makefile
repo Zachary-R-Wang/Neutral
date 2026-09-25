@@ -14,7 +14,7 @@ PY := .venv/bin/python
 RUN := PYTHONPATH=src $(PY)
 
 .DEFAULT_GOAL := help
-.PHONY: help dev test eval lint dataset clean
+.PHONY: help dev test eval lint dataset clean deploy
 
 help:
 	@echo ""
@@ -26,6 +26,7 @@ help:
 	@echo "    make eval     Measure divergence and write a report."
 	@echo "    make dataset  Print the matched prompt pairs to check them by eye."
 	@echo "    make lint     Check code style."
+	@echo "    make deploy   Test, then put the current version on neutralai.app."
 	@echo ""
 
 .venv:
@@ -55,6 +56,31 @@ dataset: .venv
 lint: .venv
 	@$(PY) -m ruff check src tests tools
 	@$(PY) -m ruff format --check src tests tools
+
+# Nothing reaches the live site unless the tests and the linter pass first. Each step is
+# its own line, so a failure stops make outright - piping a check into something else
+# would report the last command's success and carry on past it.
+deploy: .venv
+	@command -v flyctl >/dev/null 2>&1 || { \
+		echo ""; \
+		echo "  flyctl is not installed. Install it with:  brew install flyctl"; \
+		echo "  then sign in with:                         flyctl auth login"; \
+		echo ""; exit 1; }
+	@echo "Checking code style..."
+	@$(PY) -m ruff check src tests tools
+	@$(PY) -m ruff format --check src tests tools
+	@echo "Running the tests..."
+	@$(RUN) tools/run_tests.py
+	@echo ""
+	@echo "Deploying to neutralai.app. This takes a few minutes."
+	@flyctl deploy --remote-only --now || { \
+		echo ""; \
+		echo "  The deploy failed on Fly's side, not in this code - the tests passed."; \
+		echo "  Usually temporary. Wait a few minutes and run make deploy again."; \
+		echo "  Their status page: https://status.flyio.net"; \
+		echo ""; exit 1; }
+	@echo ""
+	@echo "  Live at https://neutralai.app"
 
 clean:
 	@rm -rf .pytest_cache .ruff_cache reports/*.json reports/*.html
