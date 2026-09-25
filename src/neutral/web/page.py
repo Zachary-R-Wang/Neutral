@@ -98,9 +98,9 @@ CSS = """
   /* The corner cut. One value so every octagon agrees. */
   --cut:6px;
   --accent:hsl(272 62% 68%);
-  --glow-1:hsl(274 88% 72% / .46);
-  --glow-2:hsl(274 80% 66% / .17);
-  --plane-foot:hsl(157 50% 3.5%);
+  --glow-1:hsl(276 96% 76% / .78);
+  --glow-2:hsl(274 88% 68% / .30);
+  --plane-foot:hsl(157 50% 4.2%);
   color-scheme:dark;
 }
 /* Dark preference goes a shade further down the same axis rather than to a different
@@ -110,7 +110,7 @@ CSS = """
   --subtle:hsl(152 16% 8%);
   --line:hsl(150 14% 19%);
   --line-2:hsl(150 14% 26%);
-  --plane-foot:hsl(159 55% 2%);
+  --plane-foot:hsl(159 55% 2.4%);
 }}
 *{box-sizing:border-box}
 html,body{height:100%}
@@ -118,11 +118,11 @@ body{
   margin:0;color:var(--fg);
   background:linear-gradient(
     180deg,
-    hsl(142 23% 37%) 0%,
-    hsl(145 25% 29%) 9%,
-    hsl(148 29% 20%) 23%,
-    hsl(151 35% 13%) 43%,
-    hsl(154 43% 7.5%) 71%,
+    hsl(142 23% 44.4%) 0%,
+    hsl(145 25% 34.8%) 9%,
+    hsl(148 29% 24%) 23%,
+    hsl(151 35% 15.6%) 43%,
+    hsl(154 43% 9%) 71%,
     var(--plane-foot) 100%);
   background-attachment:fixed;
   font-family:"Geist","Geist Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,
@@ -147,10 +147,11 @@ body{
 }
 .edge{background:var(--line);padding:1px}
 .edge.on-light{background:var(--panel-line)}
-.glow{filter:drop-shadow(0 0 2.5px var(--glow-1)) drop-shadow(0 0 14px var(--glow-2));
+.glow{filter:drop-shadow(0 0 1px var(--glow-1)) drop-shadow(0 0 4px var(--glow-1))
+  drop-shadow(0 0 13px var(--glow-2));
   transition:filter .18s}
-.glow:focus-within{filter:drop-shadow(0 0 3.5px var(--glow-1))
-  drop-shadow(0 0 18px var(--glow-2))}
+.glow:focus-within{filter:drop-shadow(0 0 1px var(--glow-1))
+  drop-shadow(0 0 6px var(--glow-1)) drop-shadow(0 0 18px var(--glow-2))}
 
 /* header -------------------------------------------------------------------- */
 .top{display:flex;align-items:center;gap:12px;padding-bottom:16px}
