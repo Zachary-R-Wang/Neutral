@@ -51,7 +51,20 @@ GREETING_JS = """
   else if(h>=17&&h<22) timed=['Good evening!','Evening!'];
   else timed=['Good night!','Still up?','Working late?'];
   var pool=anytime.concat(timed);
-  el.textContent=pool[Math.floor(Math.random()*pool.length)];
+  var text=pool[Math.floor(Math.random()*pool.length)];
+
+  var still=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if(still){ el.textContent=text; return; }
+
+  el.textContent='';
+  var caret=document.createElement('span'); caret.className='caret';
+  el.appendChild(caret);
+  var i=0;
+  (function tick(){
+    if(i>=text.length) return;
+    caret.insertAdjacentText('beforebegin', text.charAt(i++));
+    setTimeout(tick, 42 + Math.random()*38);
+  })();
 })();
 """
 
@@ -67,7 +80,7 @@ CSS = """
   --solid:hsl(0 0% 9%); --on-solid:hsl(0 0% 100%);
   --amber:hsl(38 92% 45%);
   /* The corner cut. One value so every octagon agrees. */
-  --cut:10px;
+  --cut:6px;
   --glow-1:hsl(272 70% 58% / .10);
   --glow-2:hsl(272 70% 58% / .05);
   color-scheme:light;
@@ -85,10 +98,10 @@ CSS = """
 @media(prefers-color-scheme:dark){:root:not([data-theme=light]) body{
   background:linear-gradient(
     180deg,
-    hsl(150 22% 9%) 0%,
-    hsl(153 20% 6.5%) 34%,
-    hsl(157 21% 4%) 70%,
-    hsl(162 24% 2.5%) 100%);
+    hsl(152 16% 13%) 0%,
+    hsl(156 17% 9%) 32%,
+    hsl(160 19% 5.5%) 68%,
+    hsl(165 22% 3%) 100%);
 }}
 *{box-sizing:border-box}
 html,body{height:100%}
@@ -98,10 +111,10 @@ body{
      gradient that barely moves. Fixed, so it does not slide as the thread scrolls. */
   background:linear-gradient(
     180deg,
-    hsl(147 40% 96.5%) 0%,
-    hsl(150 30% 94%) 32%,
-    hsl(155 24% 90%) 68%,
-    hsl(160 21% 86%) 100%);
+    hsl(150 24% 93%) 0%,
+    hsl(154 19% 87%) 30%,
+    hsl(158 16% 79%) 65%,
+    hsl(163 14% 70%) 100%);
   background-attachment:fixed;
   font-family:"Geist","Geist Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,
     "Helvetica Neue",Arial,sans-serif;
@@ -170,8 +183,8 @@ body{
 details.original{margin-top:10px}
 details.original>summary{display:inline-flex;align-items:center;gap:6px;cursor:pointer;
   font-size:12.5px;color:var(--fg-3);border:1px solid var(--line);
-  clip-path:polygon(5px 0,calc(100% - 5px) 0,100% 5px,100% calc(100% - 5px),
-    calc(100% - 5px) 100%,5px 100%,0 calc(100% - 5px),0 5px);
+  clip-path:polygon(4px 0,calc(100% - 4px) 0,100% 4px,100% calc(100% - 4px),
+    calc(100% - 4px) 100%,4px 100%,0 calc(100% - 4px),0 4px);
   padding:4px 11px;list-style:none;user-select:none;transition:color .12s,border-color .12s}
 details.original>summary::-webkit-details-marker{display:none}
 details.original>summary::before{content:"";width:0;height:0;
@@ -194,21 +207,41 @@ details.original>summary:hover,details.original[open]>summary{color:var(--fg-2);
 .raw .changes code{font-family:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
   font-size:11.5px;color:var(--fg-2)}
 
+/* the caret that types out the greeting, then rests blinking at the end */
+.caret{display:inline-block;width:2px;height:.78em;background:currentColor;
+  margin-left:3px;vertical-align:baseline;animation:caret 1.05s step-end infinite}
+@keyframes caret{50%{opacity:0}}
+
+/* the model is composing */
+.typing-wrap{display:inline-block}
+.typing{display:inline-flex;gap:5px;align-items:center;background:var(--panel);
+  padding:13px 15px}
+.typing i{width:6px;height:6px;border-radius:50%;background:var(--fg-3);
+  animation:think 1.3s infinite both}
+.typing i:nth-child(2){animation-delay:.16s}
+.typing i:nth-child(3){animation-delay:.32s}
+@keyframes think{
+  0%,72%,100%{opacity:.22;transform:translateY(0)}
+  36%{opacity:.85;transform:translateY(-3px)}}
+@media(prefers-reduced-motion:reduce){
+  .caret,.typing i{animation:none}
+  .caret{opacity:1}}
+
 /* composer ------------------------------------------------------------------ */
 form.composer{position:sticky;bottom:0;padding:12px 0 0}
 form.composer.sticky::before{content:"";position:absolute;inset:-26px 0 auto 0;height:26px;
-  background:linear-gradient(to bottom, transparent, hsl(160 21% 86% / .9));
+  background:linear-gradient(to bottom, transparent, hsl(163 14% 70% / .92));
   pointer-events:none}
 @media(prefers-color-scheme:dark){:root:not([data-theme=light]) form.composer.sticky::before{
-  background:linear-gradient(to bottom, transparent, hsl(162 24% 2.5% / .9))}}
+  background:linear-gradient(to bottom, transparent, hsl(165 22% 3% / .92))}}
 .box{display:flex;gap:8px;align-items:flex-end;background:var(--panel);
   padding:9px 9px 9px 15px}
 textarea{flex:1;border:0;background:transparent;color:var(--fg);font:inherit;
   font-size:15px;resize:none;outline:none;max-height:184px;min-height:26px;padding:4px 0}
 textarea::placeholder{color:var(--fg-3)}
 button{background:var(--solid);color:var(--on-solid);border:0;
-  clip-path:polygon(7px 0,calc(100% - 7px) 0,100% 7px,100% calc(100% - 7px),
-    calc(100% - 7px) 100%,7px 100%,0 calc(100% - 7px),0 7px);
+  clip-path:polygon(4px 0,calc(100% - 4px) 0,100% 4px,100% calc(100% - 4px),
+    calc(100% - 4px) 100%,4px 100%,0 calc(100% - 4px),0 4px);
   padding:9px 17px;font:inherit;font-size:13.5px;font-weight:500;cursor:pointer;
   white-space:nowrap;transition:opacity .12s}
 button:hover{opacity:.85}
@@ -374,18 +407,88 @@ COMPOSER_JS = """
 (function(){
   var f=document.querySelector('form.composer'); if(!f) return;
   var t=f.querySelector('textarea');
+  var btn=f.querySelector('button[type=submit]');
+
+  // Deliberately not called on load. At that point the layout has not settled and
+  // scrollHeight comes back as 180 on an empty box, which then sticks - the natural
+  // height from CSS is 32px and correct. Growth only matters once someone types.
   function grow(){ t.style.height='0px';
     t.style.height=Math.max(26,Math.min(t.scrollHeight,180))+'px'; }
-  t.addEventListener('input',grow); grow();
+  t.addEventListener('input',grow);
+
+  function oct(cls, inner){
+    var wrap=document.createElement('div'); wrap.className='oct edge '+cls;
+    var box=document.createElement('div'); box.className='oct '+inner;
+    wrap.appendChild(box); return wrap;
+  }
+
+  // The thread is created on the first message rather than waiting for a reply, so the
+  // page never sits on the opening screen while a request is in flight.
+  function enterThread(){
+    var thread=document.querySelector('.thread');
+    if(thread) return thread;
+    var opening=document.querySelector('.opening');
+    thread=document.createElement('div'); thread.className='thread';
+    if(opening){
+      opening.parentNode.insertBefore(thread, opening);
+      opening.parentNode.insertBefore(f, opening);
+      opening.remove();
+      f.classList.add('sticky');
+      t.placeholder='Reply...';
+      if(btn) btn.textContent='Send';
+    }
+    return thread;
+  }
+
+  function showAsked(thread, text){
+    var wrap=oct('asked-wrap','asked');
+    wrap.firstChild.textContent=text;
+    thread.appendChild(wrap);
+  }
+
+  function showTyping(thread){
+    var reply=document.createElement('div'); reply.className='reply';
+    var wrap=oct('typing-wrap','typing');
+    for(var i=0;i<3;i++) wrap.firstChild.appendChild(document.createElement('i'));
+    reply.appendChild(wrap); thread.appendChild(reply);
+    return reply;
+  }
+
+  function toBottom(){ window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'}); }
+
+  f.addEventListener('submit', function(e){
+    var text=t.value.trim(); if(!text) { e.preventDefault(); return; }
+    if(!window.fetch || !window.DOMParser) return;   // no script, normal form post
+    e.preventDefault();
+
+    var thread=enterThread();
+    showAsked(thread, text);
+    var pending=showTyping(thread);
+    t.value=''; grow(); if(btn) btn.disabled=true;
+    toBottom();
+
+    var body=new FormData(); body.append('prompt', text);
+    fetch('/', {method:'POST', body:body, headers:{'X-Requested-With':'fetch'}})
+      .then(function(r){ return r.text(); })
+      .then(function(html){
+        var doc=new DOMParser().parseFromString(html,'text/html');
+        var fresh=doc.querySelector('.thread');
+        if(fresh) thread.innerHTML=fresh.innerHTML; else pending.remove();
+        var top=doc.querySelector('.top');
+        if(top) document.querySelector('.top').innerHTML=top.innerHTML;
+      })
+      .catch(function(){
+        pending.innerHTML='<div class="oct flag stop">That did not reach the model. '+
+          'Check your connection and try again.</div>';
+      })
+      .finally(function(){ if(btn) btn.disabled=false; t.focus(); toBottom(); });
+  });
+
   t.addEventListener('keydown',function(e){
     if(e.key==='Enter' && !e.shiftKey && !e.isComposing){
       e.preventDefault();
       if(t.value.trim()) f.requestSubmit();
     }
-  });
-  f.addEventListener('submit',function(){
-    var b=f.querySelector('button[type=submit]');
-    if(b){ b.disabled=true; b.textContent='Sending...'; }
   });
   t.focus();
 })();
