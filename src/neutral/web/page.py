@@ -24,6 +24,10 @@ from html import escape
 
 from neutral.conversation import Conversation, Turn
 from neutral.invariants import BANNER
+from neutral.web import dither
+
+# Built once at import: a seeded pattern, so the page looks the same on every load.
+CORNER = dither.build()
 
 PLACEHOLDER = "Ask anything!"
 
@@ -77,60 +81,51 @@ CSS = """
    light is confined to a band near the top and the plane falls away quickly to something
    close to #001D00 at the foot. Ink is a warm parchment rather than white, because pure
    white on green reads clinical and the brief was bookish. */
+/* A flat light plane with the deep green breaking in from the bottom-right corner. The
+   gradient is gone: what carries the depth now is the pattern in web/dither.py, which
+   dissolves from a solid body into separate blocks as it reaches inward.
+
+   Light only. A second palette in the other direction is what caused most of the churn
+   here, and the design has an obvious side. */
 :root{
-  /* Barely green - a white with the plane's hue at a few percent, so it belongs to the
-     room without looking tinted. */
-  --panel:hsl(152 30% 98.5%);
-  --panel-line:hsl(150 14% 87%);
-  --on-panel:hsl(152 18% 14%);
-  --on-panel-2:hsl(150 9% 38%);
-  --on-panel-3:hsl(150 7% 55%);
-  --subtle:hsl(152 18% 10%);
-  --fg:hsl(44 16% 92%);
-  --fg-2:hsl(140 9% 70%);
-  --fg-3:hsl(140 8% 53%);
-  --line:hsl(150 15% 22%);
-  --line-2:hsl(150 15% 29%);
-  --solid:hsl(44 16% 92%);
-  --on-solid:hsl(152 30% 8%);
-  --amber:hsl(38 76% 62%);
-  --hold:hsl(4 62% 62%);
+  --plane:hsl(150 30% 96%);
+  --corner:hsl(152 34% 15%);
+  --panel:hsl(0 0% 100%);
+  --subtle:hsl(150 22% 93%);
+  --fg:hsl(152 20% 11%);
+  --fg-2:hsl(150 10% 38%);
+  --fg-3:hsl(150 8% 56%);
+  --line:hsl(150 14% 88%);
+  --line-2:hsl(150 14% 82%);
+  --panel-line:hsl(150 14% 88%);
+  --on-panel:var(--fg);
+  --on-panel-2:var(--fg-2);
+  --on-panel-3:var(--fg-3);
+  --solid:hsl(152 22% 13%);
+  --on-solid:hsl(0 0% 100%);
+  --amber:hsl(38 88% 44%);
+  --hold:hsl(4 66% 48%);
+  --accent:hsl(272 62% 56%);
   /* The corner cut. One value so every octagon agrees. */
   --cut:6px;
-  --accent:hsl(272 62% 68%);
-  --glow-1:hsl(276 96% 76% / .78);
-  --glow-2:hsl(274 88% 68% / .30);
-  --plane-foot:hsl(157 50% 4.2%);
-  color-scheme:dark;
+  --glow-1:hsl(276 92% 58% / .40);
+  --glow-2:hsl(274 84% 56% / .16);
+  color-scheme:light;
 }
-/* Dark preference goes a shade further down the same axis rather than to a different
-   palette - there is no light counterpart to design, because the design is dark. */
-@media(prefers-color-scheme:dark){:root:not([data-theme=light]){
-  --panel:hsl(152 28% 97.5%);
-  --subtle:hsl(152 16% 8%);
-  --line:hsl(150 14% 19%);
-  --line-2:hsl(150 14% 26%);
-  --plane-foot:hsl(159 55% 2.4%);
-}}
 *{box-sizing:border-box}
 html,body{height:100%}
 body{
-  margin:0;color:var(--fg);
-  background:linear-gradient(
-    180deg,
-    hsl(142 23% 44.4%) 0%,
-    hsl(145 25% 34.8%) 9%,
-    hsl(148 29% 24%) 23%,
-    hsl(151 35% 15.6%) 43%,
-    hsl(154 43% 9%) 71%,
-    var(--plane-foot) 100%);
-  background-attachment:fixed;
+  margin:0;color:var(--fg);background:var(--plane);
   font-family:"Geist","Geist Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,
     "Helvetica Neue",Arial,sans-serif;
   font-size:15px;line-height:1.6;
   -webkit-font-smoothing:antialiased;
 }
-.wrap{max-width:720px;margin:0 auto;padding:20px 24px 32px;min-height:100%;
+/* Behind everything, anchored to the corner, never interactive. */
+.corner{position:fixed;right:0;bottom:0;z-index:0;pointer-events:none;
+  width:min(48vw,520px);height:min(46vh,440px)}
+.wrap{position:relative;z-index:1;max-width:720px;margin:0 auto;
+  padding:20px 24px 32px;min-height:100%;
   display:flex;flex-direction:column}
 
 /* Octagonal corners: a 45-degree cut instead of a radius. A clipped element cannot
@@ -242,7 +237,7 @@ details.original>summary:hover,details.original[open]>summary{color:var(--fg-2);
 /* composer ------------------------------------------------------------------ */
 form.composer{position:sticky;bottom:0;padding:12px 0 0}
 form.composer.sticky::before{content:"";position:absolute;inset:-26px 0 auto 0;height:26px;
-  background:linear-gradient(to bottom, transparent, var(--plane-foot));
+  background:linear-gradient(to bottom, transparent, var(--plane));
   pointer-events:none}
 
 .box{display:flex;gap:8px;align-items:flex-end;background:var(--panel);
@@ -261,8 +256,10 @@ button.ghost{background:transparent;color:var(--fg-3);border:1px solid var(--lin
   font-weight:400;font-size:12.5px;padding:3px 9px}
 button.ghost:hover{color:var(--fg-2);border-color:var(--line-2);opacity:1}
 .hint{color:var(--fg-3);font-size:12px;margin:9px 2px 0;letter-spacing:-.005em}
-.foot{margin-top:28px;padding-top:16px;border-top:1px solid var(--line);
-  display:flex;gap:16px;font-size:12px;color:var(--fg-3)}
+.foot{position:relative;margin-top:28px;padding-top:16px;
+  border-top:1px solid var(--line);display:flex;gap:16px;font-size:12px;
+  color:var(--fg-3)}
+.foot a{white-space:nowrap}
 .foot a{color:var(--fg-3);text-decoration:none}
 .foot a:hover{color:var(--fg-2)}
 .legal{max-width:640px}
@@ -548,7 +545,7 @@ def page(conversation: Conversation | None = None, *, error: str = "") -> str:
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet"
   href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono&display=swap">
-<style>{CSS}</style></head><body><div class="wrap">
+<style>{CSS}</style></head><body>{CORNER}<div class="wrap">
 <div class="top">
   <h1>Neutral</h1>
   <div class="notice">{escape(BANNER)}</div>
@@ -559,7 +556,7 @@ def page(conversation: Conversation | None = None, *, error: str = "") -> str:
 {body}
 <div class="foot">
   <a href="/terms">Terms</a><a href="/privacy">Privacy</a>
-  <span style="margin-left:auto">Phase 1 &mdash; names and bound pronouns only</span>
+  <span>Phase 1 &mdash; names and bound pronouns only</span>
 </div>
 </div><script>{COMPOSER_JS}</script></body></html>
 """

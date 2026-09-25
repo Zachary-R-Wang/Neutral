@@ -85,7 +85,14 @@ class TestTheOriginalIsAlwaysOneClickAway:
         """No dialog, no overlay - it is a <details> inside the reply it belongs to."""
         html, _ = rendered()
         assert "<dialog" not in html
-        assert "position:fixed" not in html
+
+        # Scoped to the rules that matter: decoration elsewhere may legitimately be
+        # fixed, but nothing that carries the original answer may lift off the page.
+        for selector in ("details.original", r"details\.original>summary", r"\.raw"):
+            rule = re.search(rf"{selector}\s*\{{([^}}]*)\}}", html)
+            if rule:
+                assert "fixed" not in rule.group(1)
+                assert "absolute" not in rule.group(1)
         reply = re.search(r"<div class=\"reply\">(.*?)</div>\s*</div>", html, re.S)
         assert reply and "details" in reply.group(1)
 
