@@ -15,6 +15,7 @@ until there is both an account and a key.
 
 from __future__ import annotations
 
+import os
 import threading
 import traceback
 
@@ -82,8 +83,22 @@ def db():
         return _db
 
 
+# Set NEUTRAL_PUBLIC=true when Neutral is reachable over the internet. It marks the
+# session cookie "secure", which tells the browser never to send it over plain HTTP.
+# Off by default because a secure cookie is not sent over http://127.0.0.1 either, and
+# nobody should have to discover that while trying to sign in locally.
+PUBLIC = os.environ.get("NEUTRAL_PUBLIC", "").strip().lower() == "true"
+
+
 def _cookie(response, key: str):
-    response.set_cookie(COOKIE, key, httponly=True, samesite="lax", max_age=8 * 60 * 60)
+    response.set_cookie(
+        COOKIE,
+        key,
+        httponly=True,
+        samesite="lax",
+        secure=PUBLIC,
+        max_age=8 * 60 * 60,
+    )
     return response
 
 

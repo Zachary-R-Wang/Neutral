@@ -432,6 +432,19 @@ class TestSigningInAndOut:
         # The remembered choice comes back; the credential does not.
         assert "gpt-6-astra" in client.get("/connect").text
 
+    def test_the_cookie_is_marked_secure_when_neutral_is_public(self, tmp_path, monkeypatch):
+        """On a public site the session cookie must never travel over plain HTTP."""
+        monkeypatch.setenv("NEUTRAL_ACCOUNTS_DB", str(tmp_path / "a.db"))
+        monkeypatch.setattr(app_module, "_db", None)
+        monkeypatch.setattr(app_module, "sessions", Sessions())
+        monkeypatch.setattr(app_module, "PUBLIC", True)
+
+        with TestClient(app_module.app) as public:
+            header = public.post(
+                "/signup", data={"email": EMAIL, "password": PASSWORD}
+            ).headers.get("set-cookie", "")
+        assert "secure" in header.lower()
+
     def test_the_session_cookie_is_not_readable_by_scripts(self, client):
         _sign_up(client)
         header = client.post(
