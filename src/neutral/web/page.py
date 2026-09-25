@@ -78,7 +78,13 @@ CSS = """
    close to #001D00 at the foot. Ink is a warm parchment rather than white, because pure
    white on green reads clinical and the brief was bookish. */
 :root{
-  --panel:hsl(150 18% 13%);
+  /* Barely green - a white with the plane's hue at a few percent, so it belongs to the
+     room without looking tinted. */
+  --panel:hsl(152 30% 98.5%);
+  --panel-line:hsl(150 14% 87%);
+  --on-panel:hsl(152 18% 14%);
+  --on-panel-2:hsl(150 9% 38%);
+  --on-panel-3:hsl(150 7% 55%);
   --subtle:hsl(152 18% 10%);
   --fg:hsl(44 16% 92%);
   --fg-2:hsl(140 9% 70%);
@@ -92,15 +98,15 @@ CSS = """
   /* The corner cut. One value so every octagon agrees. */
   --cut:6px;
   --accent:hsl(272 62% 68%);
-  --glow-1:hsl(272 60% 62% / .10);
-  --glow-2:hsl(272 60% 62% / .05);
+  --glow-1:hsl(274 88% 72% / .46);
+  --glow-2:hsl(274 80% 66% / .17);
   --plane-foot:hsl(157 50% 3.5%);
   color-scheme:dark;
 }
 /* Dark preference goes a shade further down the same axis rather than to a different
    palette - there is no light counterpart to design, because the design is dark. */
 @media(prefers-color-scheme:dark){:root:not([data-theme=light]){
-  --panel:hsl(150 17% 10.5%);
+  --panel:hsl(152 28% 97.5%);
   --subtle:hsl(152 16% 8%);
   --line:hsl(150 14% 19%);
   --line-2:hsl(150 14% 26%);
@@ -112,11 +118,11 @@ body{
   margin:0;color:var(--fg);
   background:linear-gradient(
     180deg,
-    hsl(143 22% 33%) 0%,
-    hsl(146 25% 26%) 11%,
-    hsl(149 30% 18%) 27%,
-    hsl(152 36% 11.5%) 47%,
-    hsl(155 43% 7%) 73%,
+    hsl(142 23% 37%) 0%,
+    hsl(145 25% 29%) 9%,
+    hsl(148 29% 20%) 23%,
+    hsl(151 35% 13%) 43%,
+    hsl(154 43% 7.5%) 71%,
     var(--plane-foot) 100%);
   background-attachment:fixed;
   font-family:"Geist","Geist Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,
@@ -140,10 +146,11 @@ body{
     0 calc(100% - var(--cut)), 0 var(--cut));
 }
 .edge{background:var(--line);padding:1px}
-.glow{filter:drop-shadow(0 0 4px var(--glow-1)) drop-shadow(0 0 16px var(--glow-2));
+.edge.on-light{background:var(--panel-line)}
+.glow{filter:drop-shadow(0 0 2.5px var(--glow-1)) drop-shadow(0 0 14px var(--glow-2));
   transition:filter .18s}
-.glow:focus-within{filter:drop-shadow(0 0 5px var(--glow-1))
-  drop-shadow(0 0 20px var(--glow-2))}
+.glow:focus-within{filter:drop-shadow(0 0 3.5px var(--glow-1))
+  drop-shadow(0 0 18px var(--glow-2))}
 
 /* header -------------------------------------------------------------------- */
 .top{display:flex;align-items:center;gap:12px;padding-bottom:16px}
@@ -165,7 +172,7 @@ body{
 .thread{flex:1;display:flex;flex-direction:column;gap:26px;margin-bottom:28px}
 .asked-wrap{align-self:flex-end;max-width:82%}
 .asked{background:var(--panel);padding:10px 14px;white-space:pre-wrap;
-  font-size:14.5px;color:var(--fg-2)}
+  font-size:14.5px;color:var(--on-panel)}
 .reply .prose{font-size:15px}
 .prose>*:first-child{margin-top:0}
 .prose>*:last-child{margin-bottom:0}
@@ -220,7 +227,7 @@ details.original>summary:hover,details.original[open]>summary{color:var(--fg-2);
 .typing-wrap{display:inline-block}
 .typing{display:inline-flex;gap:5px;align-items:center;background:var(--panel);
   padding:13px 15px}
-.typing i{width:6px;height:6px;border-radius:50%;background:var(--fg-3);
+.typing i{width:6px;height:6px;border-radius:50%;background:var(--on-panel-3);
   animation:think 1.3s infinite both}
 .typing i:nth-child(2){animation-delay:.16s}
 .typing i:nth-child(3){animation-delay:.32s}
@@ -239,10 +246,10 @@ form.composer.sticky::before{content:"";position:absolute;inset:-26px 0 auto 0;h
 
 .box{display:flex;gap:8px;align-items:flex-end;background:var(--panel);
   padding:9px 9px 9px 15px}
-textarea{flex:1;border:0;background:transparent;color:var(--fg);font:inherit;
+textarea{flex:1;border:0;background:transparent;color:var(--on-panel);font:inherit;
   font-size:15px;resize:none;outline:none;max-height:184px;min-height:40px;padding:8px 0}
-textarea::placeholder{color:var(--fg-3)}
-button{background:var(--solid);color:var(--on-solid);border:0;
+textarea::placeholder{color:var(--on-panel-3)}
+button{background:var(--on-panel);color:var(--panel);border:0;
   clip-path:polygon(4px 0,calc(100% - 4px) 0,100% 4px,100% calc(100% - 4px),
     calc(100% - 4px) 100%,4px 100%,0 calc(100% - 4px),0 4px);
   padding:9px 17px;font:inherit;font-size:13.5px;font-weight:500;cursor:pointer;
@@ -420,7 +427,7 @@ COMPOSER_JS = """
   t.addEventListener('input',grow);
 
   function oct(cls, inner){
-    var wrap=document.createElement('div'); wrap.className='oct edge '+cls;
+    var wrap=document.createElement('div'); wrap.className='oct edge on-light '+cls;
     var box=document.createElement('div'); box.className='oct '+inner;
     wrap.appendChild(box); return wrap;
   }
@@ -501,7 +508,7 @@ COMPOSER_JS = """
 def _composer(*, opening: bool) -> str:
     label = "Start" if opening else "Send"
     return f"""<form class="composer{"" if opening else " sticky"}" method="post" action="/">
-  <div class="glow"><div class="oct edge"><div class="oct box">
+  <div class="glow"><div class="oct edge on-light"><div class="oct box">
     <textarea name="prompt" rows="1" autofocus
       placeholder="{escape(PLACEHOLDER) if opening else "Reply..."}"></textarea>
     <button type="submit">{label}</button>
