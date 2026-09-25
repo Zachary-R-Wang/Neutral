@@ -280,6 +280,14 @@ button.ghost:hover{color:var(--fg-2);border-color:var(--line-2);opacity:1}
 .card h2{font-size:30px;font-weight:400;letter-spacing:-.04em;line-height:1.1;
   margin:0 0 10px}
 .card>p.lede{color:var(--fg-2);margin:0 0 26px;font-size:14.5px}
+/* Two paragraphs where the first says what Neutral is and the second says what the
+   account does. Wrapped rather than margin-tweaked, so neither rule has to know whether
+   the other paragraph is there. */
+.card>.intro{margin:0 0 26px}
+.card>.intro p{margin:0 0 9px}
+.card>.intro p:last-child{margin:0}
+.card>.intro .lede{color:var(--fg-2);font-size:14.5px}
+.card>.intro .sub{color:var(--fg-3);font-size:13px}
 .field{margin-bottom:14px}
 .field>label{display:block;font-size:12.5px;color:var(--fg-2);margin-bottom:6px;
   letter-spacing:-.005em}

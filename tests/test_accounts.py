@@ -285,6 +285,38 @@ class TestTheUserChoosesWhereTheirPromptGoes:
         assert _Adapter.built[0][0] == "anthropic"
 
 
+class TestTheFirstPageSaysWhatTheProductIs:
+    """A visitor who has never heard of Neutral lands on the sign-up page.
+
+    Before accounts existed, the opening page carried this sentence. Moving sign-up in
+    front of it meant the first thing a stranger saw was a form asking for an email with
+    no explanation of what for. These tests keep the sentence on every page someone can
+    reach before they are signed in.
+    """
+
+    EXPLANATION = "removes signals that can introduce bias or indicate your"
+
+    @pytest.mark.parametrize("path", ["/", "/signin", "/signup"])
+    def test_every_page_before_signing_in_explains_what_neutral_does(self, client, path):
+        assert self.EXPLANATION in client.get(path).text
+
+    def test_it_is_still_there_once_a_second_person_signs_up(self, client):
+        """The first visit shows sign-up; later visits show sign-in. Both must say it."""
+        _sign_up(client)
+        client.post("/signout", follow_redirects=False)
+        assert self.EXPLANATION in client.get("/signin").text
+
+    def test_it_comes_before_the_form(self, client):
+        """Stated as an ordering, because underneath the fields is the same as absent."""
+        body = client.get("/signup").text
+        assert body.index(self.EXPLANATION) < body.index('name="email"')
+
+    def test_the_opening_of_a_conversation_still_says_it_too(self, client):
+        _sign_up(client)
+        _connect(client)
+        assert self.EXPLANATION in client.get("/").text
+
+
 class TestSigningInAndOut:
     def test_the_very_first_visit_offers_to_create_an_account(self, client):
         assert "Create an account" in client.get("/signin").text

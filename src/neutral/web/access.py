@@ -131,8 +131,12 @@ def signup_page(*, error: str = "", email: str = "") -> str:
     )
     body = f"""<div class="card">
   <h2>Create an account</h2>
-  <p class="lede">An account remembers your email and which model you send to. It never
-  stores your prompts, and it never stores your API key.</p>
+  <div class="intro">
+    <p class="lede">Neutral removes signals that can introduce bias or indicate your
+    identity before your prompt reaches the model.</p>
+    <p class="sub">An account remembers your email and which model you send to. It never
+    stores your prompts, and it never stores your API key.</p>
+  </div>
   {_flag(error)}
   <form method="post" action="/signup">
     {address}
