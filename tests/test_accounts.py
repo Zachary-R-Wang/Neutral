@@ -525,15 +525,29 @@ class TestAFailingDatabaseIsExplainedNotThrown:
 # ---------------------------------------------------------------------------
 
 
+def _everything_on_disk(db_path) -> bytes:
+    """Every byte SQLite wrote, not just the main file.
+
+    In write-ahead logging mode a recent write lives in accounts.db-wal until it is
+    folded into accounts.db, so reading only the main file would scan past exactly the
+    data that was written most recently - which is the data worth checking.
+    """
+    return b"".join(
+        found.read_bytes()
+        for found in sorted(db_path.parent.glob(db_path.name + "*"))
+        if found.is_file()
+    )
+
+
 class TestTheKeyIsNeverWrittenDown:
-    def test_it_is_not_in_the_database_file(self, client):
+    def test_it_is_not_in_any_file_the_database_wrote(self, client):
         _sign_up(client)
         _connect(client, "openai", "gpt-6-astra")
         client.post("/", data={"prompt": "Assess Ravi Menon."})
 
-        raw = client.db_path.read_bytes()
+        raw = _everything_on_disk(client.db_path)
         assert KEY.encode() not in raw
-        # The preference is there, so this is not passing because the file is empty.
+        # The preference is there, so this is not passing because the files are empty.
         assert b"gpt-6-astra" in raw
 
     def test_nor_is_the_prompt_or_anybody_named_in_it(self, client):
@@ -541,7 +555,7 @@ class TestTheKeyIsNeverWrittenDown:
         _connect(client)
         client.post("/", data={"prompt": "Assess Ravi Menon for promotion."})
 
-        raw = client.db_path.read_bytes()
+        raw = _everything_on_disk(client.db_path)
         for leaked in (b"Ravi", b"Menon", b"promotion", b"Person A"):
             assert leaked not in raw
 

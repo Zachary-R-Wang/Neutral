@@ -32,6 +32,7 @@ password.
 
 from __future__ import annotations
 
+import contextlib
 import hmac
 import os
 import re
@@ -101,6 +102,19 @@ def connect(path: Path | str | None = None) -> sqlite3.Connection:
         target.parent.mkdir(parents=True, exist_ok=True)
     db = sqlite3.connect(target, check_same_thread=False)
     db.row_factory = sqlite3.Row
+
+    # Write-ahead logging: a reader no longer blocks a writer, and an interrupted write
+    # cannot leave a half-updated file. Without it a second connection - a backup, or
+    # somebody looking at the live database - fails with "database is locked".
+    #
+    # busy_timeout is the other half. The default is zero, meaning a write that meets a
+    # lock gives up instantly rather than waiting the few milliseconds the other write
+    # needs. On a laptop that never happens; on a server with several people signing in
+    # at once it happens and surfaces as a failure nobody can explain.
+    with contextlib.suppress(sqlite3.Error):  # :memory: does not support WAL
+        db.execute("PRAGMA journal_mode=WAL")
+    db.execute("PRAGMA busy_timeout=5000")
+
     db.executescript(SCHEMA)
     db.commit()
     return db
