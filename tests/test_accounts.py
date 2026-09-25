@@ -400,14 +400,44 @@ class TestPickingAModel:
 
 
 class TestSigningInAndOut:
-    def test_the_very_first_visit_offers_to_create_an_account(self, client):
-        assert "Create an account" in client.get("/signin").text
+    def test_an_arriving_visitor_lands_on_the_sign_in_page(self, client):
+        """Not on the sign-up page, and not only once somebody has registered.
 
-    def test_once_someone_exists_the_page_asks_them_to_sign_in(self, client):
-        _sign_up(client)
-        client.post("/signout", follow_redirects=False)
-        body = client.get("/signin").text
-        assert "Sign in" in body and "Create an account" not in body
+        /signin used to render the sign-up page while no account existed, which meant
+        the "Sign in" link on the sign-up page led back to the sign-up page. See the
+        test below - that link is the whole reason this one is written this way.
+        """
+        landing = client.get("/", follow_redirects=False)
+        assert landing.headers["location"] == "/signin"
+        assert "<h2>Sign In</h2>" in client.get("/signin").text
+
+    def test_the_sign_in_link_actually_reaches_a_sign_in_page(self, client):
+        """The bug as reported: clicking Sign in appeared to do nothing."""
+        for accounts_exist in (False, True):
+            if accounts_exist:
+                _sign_up(client)
+                client.post("/signout", follow_redirects=False)
+
+            signup = client.get("/signup").text
+            assert 'href="/signin"' in signup, "no way out of the sign-up page"
+
+            arrived = client.get("/signin").text
+            assert "<h2>Sign In</h2>" in arrived, (
+                f"with accounts_exist={accounts_exist}, the sign-in link led somewhere "
+                f"that is not the sign-in page"
+            )
+            assert 'action="/signin"' in arrived
+
+    def test_the_two_pages_reach_each_other_in_both_directions(self, client):
+        assert 'href="/signin"' in client.get("/signup").text
+        assert 'href="/signup"' in client.get("/signin").text
+
+    def test_the_heading_does_not_repeat_the_button(self, client):
+        """ "Create an account" above a "Create account" button said it twice."""
+        body = client.get("/signup").text
+        assert "<h2>Sign Up</h2>" in body
+        assert "Create an account" not in body
+        assert ">Create account</button>" in body
 
     def test_a_wrong_password_shows_a_sentence_not_a_stack_trace(self, client):
         _sign_up(client)

@@ -148,7 +148,7 @@ def signup_page(*, error: str = "", email: str = "") -> str:
         autocomplete="new-password",
     )
     body = f"""<div class="card">
-  <h2>Create an account</h2>
+  <h2>Sign Up</h2>
   <div class="intro">
     <p class="lede">Neutral removes signals that can introduce bias or indicate your
     identity before your prompt reaches the model.</p>
@@ -163,7 +163,7 @@ def signup_page(*, error: str = "", email: str = "") -> str:
   </form>
   <p class="alt">Already have one? <a href="/signin">Sign in</a></p>
 </div>"""
-    return _shell("Create an account", body)
+    return _shell("Sign Up", body)
 
 
 def signin_page(*, error: str = "", email: str = "") -> str:
@@ -177,7 +177,7 @@ def signin_page(*, error: str = "", email: str = "") -> str:
         autocomplete="email",
     )
     body = f"""<div class="card">
-  <h2>Sign in</h2>
+  <h2>Sign In</h2>
   <p class="lede">Neutral removes signals that can introduce bias or indicate your
   identity before your prompt reaches the model.</p>
   {_flag(error)}
@@ -189,7 +189,7 @@ def signin_page(*, error: str = "", email: str = "") -> str:
   <p class="alt"><a href="/forgot">Forgotten your password?</a></p>
   <p class="alt">No account yet? <a href="/signup">Create one</a></p>
 </div>"""
-    return _shell("Sign in", body)
+    return _shell("Sign In", body)
 
 
 # ---------------------------------------------------------------------------

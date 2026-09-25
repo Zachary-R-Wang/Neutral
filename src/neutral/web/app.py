@@ -244,14 +244,18 @@ def signup(request: Request, email: str = Form(default=""), password: str = Form
 
 @app.get("/signin", response_class=HTMLResponse)
 def signin_form(request: Request):
+    """Always the sign-in page.
+
+    This used to show the sign-up page instead when no account existed yet, meaning the
+    "Sign in" link on the sign-up page led straight back to the sign-up page. The link
+    looked broken because it was. Signing in is also the right thing for an arriving
+    visitor to see: a product that asks you to register before it will admit it has
+    existing users reads like it has none.
+    """
     key, session = _session(request)
     if session.signed_in:
         return _go("/", key)
-    try:
-        first_run = accounts.count(db()) == 0
-    except AccountError as exc:
-        return _html(trouble_page(str(exc)), key)
-    return _html(signup_page() if first_run else signin_page(), key)
+    return _html(signin_page(), key)
 
 
 @app.post("/signin", response_class=HTMLResponse)
