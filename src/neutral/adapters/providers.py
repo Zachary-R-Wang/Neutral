@@ -99,6 +99,45 @@ PROVIDERS: dict[str, Provider] = {
     ),
 }
 
+# Dollars per million tokens, (input, output), checked against each vendor's own pricing
+# page on 2026-09-25. Only the flagships are here, because those are what the harness
+# measures. A model missing from this table makes the cost estimate say so out loud
+# rather than quietly report the judge's cost as the whole bill.
+PRICING: dict[str, tuple[float, float]] = {
+    "gpt-6-astra": (10.00, 50.00),
+    "gemini-3.8-flash": (0.75, 3.75),
+    "grok-4.7": (2.00, 6.00),
+    # DeepSeek charges less off-peak; the peak rate is used so an estimate is never
+    # lower than the bill.
+    "deepseek-flash": (0.30, 1.20),
+}
+
+
+def price_of(model: str) -> tuple[float, float] | None:
+    """Input and output dollars per million tokens, or None if nobody has told us."""
+    from neutral.adapters.anthropic_api import PRICING as ANTHROPIC_PRICING
+
+    return ANTHROPIC_PRICING.get(model) or PRICING.get(model)
+
+
+# Where each provider's key is read from when the evaluation harness measures it. The
+# website never uses these - there every person brings their own key, in the browser.
+KEY_ENV = {
+    "anthropic": "ANTHROPIC_API_KEY",
+    "openai": "OPENAI_API_KEY",
+    "google": "GOOGLE_API_KEY",
+    "xai": "XAI_API_KEY",
+    "deepseek": "DEEPSEEK_API_KEY",
+}
+
+
+def key_from_env(provider: str) -> str:
+    """The configured key for this provider, or empty. Never logged, never printed."""
+    import os
+
+    return os.environ.get(KEY_ENV.get(provider, ""), "").strip()
+
+
 ORDER = ("anthropic", "openai", "google", "xai", "deepseek")
 
 

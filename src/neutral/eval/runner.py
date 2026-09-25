@@ -41,6 +41,15 @@ def no_transform(prompt: str) -> str:
     return prompt
 
 
+class UnknownPrice(RuntimeError):
+    """No published price for this model, so no honest estimate can be given.
+
+    Raised rather than treated as zero. A run whose subject model is unpriced would
+    otherwise report the judge's cost as the whole bill, which is the estimate being
+    wrong in the one direction that costs money.
+    """
+
+
 class OutOfCredit(RuntimeError):
     """The account ran out of API credit mid-run.
 
@@ -290,9 +299,15 @@ def estimate_run_cost(
     judge_in = subject_calls * 700
     judge_out = subject_calls * 400
 
-    cost = estimate_cost(subject_model, subject_in, subject_out) + estimate_cost(
-        judge_model, judge_in, judge_out
-    )
+    def _cost(model: str, tokens_in: int, tokens_out: int) -> float:
+        from neutral.adapters.providers import price_of
+
+        price = price_of(model)
+        if price is None:
+            raise UnknownPrice(model)
+        return tokens_in / 1_000_000 * price[0] + tokens_out / 1_000_000 * price[1]
+
+    cost = _cost(subject_model, subject_in, subject_out) + _cost(judge_model, judge_in, judge_out)
     return subject_calls * 2, cost
 
 

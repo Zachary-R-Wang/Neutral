@@ -202,17 +202,49 @@ def threshold_is_set() -> bool:
     return False
 
 
-def _adapters(settings: Settings):
+def _adapters(settings: Settings, provider: str = "anthropic", model: str = ""):
+    """The model being measured, and the model doing the scoring.
+
+    **The judge never changes.** It stays on Anthropic whatever is being measured, for
+    two reasons. Comparability: a number from one provider's run can only be set beside
+    another's if the same scorer produced both. And CLAUDE.md section 6 forbids the model
+    under test from grading its own answers, which a per-provider judge would reintroduce
+    the moment Anthropic was the subject.
+    """
     from neutral.adapters.anthropic_api import AnthropicAdapter
+    from neutral.adapters.providers import KEY_ENV, PROVIDERS, build, key_from_env
 
     require_api_key(settings)
-    subject = AnthropicAdapter(
-        api_key=settings.api_key, model=settings.subject_model, max_tokens=8000, effort="high"
-    )
     judge = AnthropicAdapter(
         api_key=settings.api_key, model=settings.judge_model, max_tokens=4000, effort="low"
     )
-    return subject, judge
+
+    if provider == "anthropic":
+        subject = AnthropicAdapter(
+            api_key=settings.api_key,
+            model=model or settings.subject_model,
+            max_tokens=8000,
+            effort="high",
+        )
+        return subject, judge
+
+    if provider not in PROVIDERS:
+        raise ConfigError(
+            f"{provider!r} is not a provider Neutral knows. Choose one of: "
+            f"{', '.join(sorted(PROVIDERS))}."
+        )
+    key = key_from_env(provider)
+    if not key:
+        raise ConfigError(
+            f"No API key for {PROVIDERS[provider].label}.\n"
+            f"Add a line to your .env file:\n\n"
+            f"    {KEY_ENV[provider]}=your_key_here\n\n"
+            f"Get one at {PROVIDERS[provider].key_url}\n"
+            f"That account needs its own credit - your Anthropic balance does not pay "
+            f"for it. Anthropic credit still pays for the scoring, which stays on Claude "
+            f"so the runs can be compared."
+        )
+    return build(provider, key, model or PROVIDERS[provider].default_model, max_tokens=8000), judge
 
 
 def neutral_transform(prompt: str) -> str:
@@ -336,7 +368,22 @@ def run_eval(args: argparse.Namespace) -> int:
         return 1
 
     runs = 2 if args.smoke else settings.runs_per_variant
-    calls, cost = estimate_run_cost(pairs, runs, settings.subject_model, settings.judge_model)
+    from neutral.adapters.providers import PROVIDERS, default_model_for
+
+    subject_model = args.model or (
+        settings.subject_model if args.provider == "anthropic" else default_model_for(args.provider)
+    )
+    from neutral.eval.runner import UnknownPrice
+
+    try:
+        calls, cost = estimate_run_cost(pairs, runs, subject_model, settings.judge_model)
+        cost_note = f"${cost:,.2f}"
+    except UnknownPrice as exc:
+        calls = len(pairs) * 2 * runs * 2
+        cost_note = (
+            f"UNKNOWN - no published price on file for {exc.args[0]!r}. Add it to "
+            f"adapters/providers.py before running this."
+        )
 
     print(
         f"\n  Pairs:            {len(pairs)}" + (f" of {available} (a sample)" if partial else "")
@@ -344,10 +391,11 @@ def run_eval(args: argparse.Namespace) -> int:
     print(f"  Runs per variant: {runs}")
     arm = "Neutral in the path" if args.with_neutral else "baseline (no Neutral)"
     print(f"  Arm:              {arm}")
-    print(f"  Model measured:   {settings.subject_model}")
+    label = PROVIDERS[args.provider].label if args.provider in PROVIDERS else args.provider
+    print(f"  Model measured:   {subject_model}  ({label})")
     print(f"  Model scoring:    {settings.judge_model}")
     print(f"  API calls:        {calls}")
-    print(f"  Estimated cost:   ${cost:,.2f}\n")
+    print(f"  Estimated cost:   {cost_note}\n")
 
     if args.estimate:
         print("  Estimate only. Nothing was sent and nothing was charged.\n")
@@ -367,7 +415,7 @@ def run_eval(args: argparse.Namespace) -> int:
             return 1
         print()
 
-    subject, judge = _adapters(settings)
+    subject, judge = _adapters(settings, args.provider, args.model)
 
     transform = no_transform
     if args.with_neutral:
@@ -479,6 +527,12 @@ def main(argv: list[str] | None = None) -> int:
     p_run = sub.add_parser("run", help="measure divergence and write a report")
     p_run.add_argument("--slice", default="all", help="'hr' for the baseline only, or 'all'")
     p_run.add_argument("--limit", type=int, help="use only the first N pairs")
+    p_run.add_argument(
+        "--provider",
+        default="anthropic",
+        help="whose model to measure: anthropic, openai, google, xai, deepseek",
+    )
+    p_run.add_argument("--model", default="", help="override the model being measured")
     p_run.add_argument(
         "--signal",
         default="",
