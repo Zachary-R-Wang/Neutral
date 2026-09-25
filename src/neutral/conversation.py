@@ -159,6 +159,20 @@ def ask(conversation: Conversation, prompt: str, adapter) -> Turn:
         conversation.turns.append(turn)
         return turn
 
+    # Nothing was found to change, so the rewritten prompt IS the prompt. Asking the
+    # model the same question a second time would cost another call and return a
+    # different answer - models do not repeat themselves - and the interface would show
+    # two answers side by side as though Neutral had done something. It did not.
+    if rewritten[-1] == prompt and not changes:
+        turn.answer = unmodified.text
+        turn.untouched = True
+        turn.note = (
+            "Nothing in this needed changing, so it went to the model exactly as you "
+            "wrote it. There is only one answer because there was only one prompt."
+        )
+        conversation.turns.append(turn)
+        return turn
+
     neutral_history: list[tuple[str, str]] = []
     for past, past_rewritten in zip(conversation.turns, rewritten[:-1], strict=False):
         neutral_history.append(("user", past_rewritten))

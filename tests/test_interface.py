@@ -257,3 +257,50 @@ class TestTheLegalPages:
         html = page()
         assert 'href="/terms"' in html
         assert 'href="/privacy"' in html
+
+
+class TestNothingChangedMeansOneAnswer:
+    """Reported from the page: two visibly different answers with no changes listed.
+
+    Both calls had sent the identical prompt, so the difference was nothing but the
+    model's own randomness - presented side by side as though Neutral had done something.
+    """
+
+    class _Counting:
+        model = "demo"
+
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def complete(self, prompt, *, system=None, history=None):
+            self.calls += 1
+            return Completion(
+                text=f"answer number {self.calls}", model="demo", stop_reason="end_turn"
+            )
+
+    def test_a_prompt_with_no_names_makes_one_call(self):
+        adapter = self._Counting()
+        conversation = Conversation()
+        ask(conversation, "What makes a good performance review structure?", adapter)
+        assert adapter.calls == 1, (
+            "the same prompt was sent twice, so the two answers differ only by chance"
+        )
+
+    def test_it_says_why_there_is_only_one_answer(self):
+        conversation = Conversation()
+        turn = ask(conversation, "How should I structure a review?", self._Counting())
+        assert turn.untouched
+        assert "nothing in this needed changing" in turn.note.lower()
+
+    def test_no_original_toggle_is_offered_when_they_would_be_identical(self):
+        conversation = Conversation()
+        ask(conversation, "How should I structure a review?", self._Counting())
+        assert "Original response" not in page(conversation)
+
+    def test_a_prompt_with_a_name_still_makes_two_calls(self):
+        adapter = self._Counting()
+        conversation = Conversation()
+        turn = ask(conversation, "Assess Emily Carter for promotion.", adapter)
+        assert adapter.calls == 2
+        assert turn.changes
+        assert "Original response" in page(conversation)

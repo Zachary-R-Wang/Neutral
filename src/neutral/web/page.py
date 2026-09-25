@@ -61,25 +61,42 @@ CSS = """
    18% dark, headings at weight 400 with tight negative tracking, 6px radii, and almost no
    colour at all. The restraint is the point - nothing here is decorative. */
 :root{
-  --bg:hsl(0 0% 98%); --panel:hsl(0 0% 100%); --subtle:hsl(0 0% 95%);
+  --bg:hsl(150 20% 97%); --panel:hsl(150 30% 99.5%); --subtle:hsl(150 16% 94%);
   --fg:hsl(0 0% 9%); --fg-2:hsl(0 0% 30%); --fg-3:hsl(0 0% 56%);
-  --line:hsl(0 0% 92%); --line-2:hsl(0 0% 90%);
+  --line:hsl(150 12% 88%); --line-2:hsl(150 12% 84%);
   --solid:hsl(0 0% 9%); --on-solid:hsl(0 0% 100%);
   --amber:hsl(38 92% 45%);
+  /* The corner cut. One value so every octagon agrees. */
+  --cut:10px;
+  --glow-1:hsl(272 78% 58% / .20);
+  --glow-2:hsl(272 78% 58% / .10);
   color-scheme:light;
 }
 @media(prefers-color-scheme:dark){:root:not([data-theme=light]){
-  --bg:hsl(0 0% 0%); --panel:hsl(0 0% 4%); --subtle:hsl(0 0% 10%);
+  --bg:hsl(150 12% 3%); --panel:hsl(150 10% 6%); --subtle:hsl(150 8% 11%);
   --fg:hsl(0 0% 93%); --fg-2:hsl(0 0% 63%); --fg-3:hsl(0 0% 56%);
-  --line:hsl(0 0% 18%); --line-2:hsl(0 0% 22%);
+  --line:hsl(150 6% 17%); --line-2:hsl(150 6% 22%);
   --solid:hsl(0 0% 93%); --on-solid:hsl(0 0% 4%);
   --amber:hsl(38 92% 58%);
+  --glow-1:hsl(272 85% 66% / .26);
+  --glow-2:hsl(272 85% 66% / .13);
   color-scheme:dark;
+}}
+@media(prefers-color-scheme:dark){:root:not([data-theme=light]) body{
+  background:
+    radial-gradient(1100px 520px at 50% -12%, hsl(152 30% 9%), transparent 62%),
+    linear-gradient(180deg, hsl(150 14% 4%), hsl(150 12% 2%));
 }}
 *{box-sizing:border-box}
 html,body{height:100%}
 body{
-  margin:0;background:var(--bg);color:var(--fg);
+  margin:0;color:var(--fg);
+  /* A green plane rather than a flat off-white: one soft wash from the top, over a
+     gradient that barely moves. Fixed, so it does not slide as the thread scrolls. */
+  background:
+    radial-gradient(1100px 520px at 50% -12%, hsl(152 42% 90%), transparent 62%),
+    linear-gradient(180deg, hsl(150 26% 97%), hsl(150 16% 94%));
+  background-attachment:fixed;
   font-family:"Geist","Geist Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,
     "Helvetica Neue",Arial,sans-serif;
   font-size:15px;line-height:1.6;
@@ -87,6 +104,24 @@ body{
 }
 .wrap{max-width:720px;margin:0 auto;padding:20px 24px 32px;min-height:100%;
   display:flex;flex-direction:column}
+
+/* Octagonal corners: a 45-degree cut instead of a radius. A clipped element cannot
+   also carry a border, so the shape is drawn twice - an outer one filled with the line
+   colour, and an inner one inset by a pixel filled with the surface. The glow sits on a
+   wrapper outside both, because drop-shadow follows a clipped silhouette where
+   box-shadow would square it off. */
+.oct{
+  clip-path:polygon(
+    var(--cut) 0, calc(100% - var(--cut)) 0,
+    100% var(--cut), 100% calc(100% - var(--cut)),
+    calc(100% - var(--cut)) 100%, var(--cut) 100%,
+    0 calc(100% - var(--cut)), 0 var(--cut));
+}
+.edge{background:var(--line);padding:1px}
+.glow{filter:drop-shadow(0 0 4px var(--glow-1)) drop-shadow(0 0 16px var(--glow-2));
+  transition:filter .18s}
+.glow:focus-within{filter:drop-shadow(0 0 9px var(--glow-1))
+  drop-shadow(0 0 28px var(--glow-2))}
 
 /* header -------------------------------------------------------------------- */
 .top{display:flex;align-items:center;gap:12px;padding-bottom:16px}
@@ -106,9 +141,9 @@ body{
 
 /* thread -------------------------------------------------------------------- */
 .thread{flex:1;display:flex;flex-direction:column;gap:26px;margin-bottom:28px}
-.asked{align-self:flex-end;max-width:82%;background:var(--panel);
-  border:1px solid var(--line);border-radius:10px;padding:9px 13px;
-  white-space:pre-wrap;font-size:14.5px;color:var(--fg-2)}
+.asked-wrap{align-self:flex-end;max-width:82%}
+.asked{background:var(--panel);padding:10px 14px;white-space:pre-wrap;
+  font-size:14.5px;color:var(--fg-2)}
 .reply .prose{font-size:15px}
 .prose>*:first-child{margin-top:0}
 .prose>*:last-child{margin-bottom:0}
@@ -123,13 +158,15 @@ body{
   font-size:.86em;background:var(--subtle);padding:1.5px 5px;border-radius:4px}
 .prose hr{border:0;border-top:1px solid var(--line);margin:18px 0}
 .flag{font-size:13px;color:var(--fg-2);background:var(--subtle);
-  border-radius:8px;padding:9px 12px;margin-bottom:10px}
+  padding:10px 13px;margin-bottom:10px}
 
 /* the original answer, opening in place ------------------------------------- */
 details.original{margin-top:10px}
 details.original>summary{display:inline-flex;align-items:center;gap:6px;cursor:pointer;
-  font-size:12.5px;color:var(--fg-3);border:1px solid var(--line);border-radius:6px;
-  padding:3px 9px;list-style:none;user-select:none;transition:color .12s,border-color .12s}
+  font-size:12.5px;color:var(--fg-3);border:1px solid var(--line);
+  clip-path:polygon(5px 0,calc(100% - 5px) 0,100% 5px,100% calc(100% - 5px),
+    calc(100% - 5px) 100%,5px 100%,0 calc(100% - 5px),0 5px);
+  padding:4px 11px;list-style:none;user-select:none;transition:color .12s,border-color .12s}
 details.original>summary::-webkit-details-marker{display:none}
 details.original>summary::before{content:"";width:0;height:0;
   border-left:4px solid currentColor;border-top:3.5px solid transparent;
@@ -137,7 +174,7 @@ details.original>summary::before{content:"";width:0;height:0;
 details.original[open]>summary::before{transform:rotate(90deg)}
 details.original>summary:hover,details.original[open]>summary{color:var(--fg-2);
   border-color:var(--line-2)}
-.raw{margin-top:8px;background:var(--subtle);border-radius:8px;padding:12px 14px}
+.raw{margin-top:8px;background:var(--subtle);padding:13px 15px}
 .raw .label{font-size:11px;letter-spacing:.02em;color:var(--fg-3);margin-bottom:6px}
 .prose.small{font-size:13px;line-height:1.55;color:var(--fg-2)}
 .prose.small p{margin:0 0 9px}
@@ -152,16 +189,21 @@ details.original>summary:hover,details.original[open]>summary{color:var(--fg-2);
   font-size:11.5px;color:var(--fg-2)}
 
 /* composer ------------------------------------------------------------------ */
-form.composer{position:sticky;bottom:0;background:var(--bg);padding:10px 0 0}
-.box{display:flex;gap:8px;align-items:flex-end;border:1px solid var(--line);
-  border-radius:12px;background:var(--panel);padding:8px 8px 8px 14px;
-  transition:border-color .12s}
-.box:focus-within{border-color:var(--fg-3)}
+form.composer{position:sticky;bottom:0;padding:12px 0 0}
+form.composer::before{content:"";position:absolute;inset:-26px 0 auto 0;height:26px;
+  background:linear-gradient(to bottom, transparent, hsl(150 16% 94% / .92));
+  pointer-events:none}
+@media(prefers-color-scheme:dark){:root:not([data-theme=light]) form.composer::before{
+  background:linear-gradient(to bottom, transparent, hsl(150 12% 2% / .92))}}
+.box{display:flex;gap:8px;align-items:flex-end;background:var(--panel);
+  padding:9px 9px 9px 15px}
 textarea{flex:1;border:0;background:transparent;color:var(--fg);font:inherit;
   font-size:15px;resize:none;outline:none;max-height:184px;min-height:26px;padding:4px 0}
 textarea::placeholder{color:var(--fg-3)}
-button{background:var(--solid);color:var(--on-solid);border:0;border-radius:6px;
-  padding:7px 14px;font:inherit;font-size:13.5px;font-weight:500;cursor:pointer;
+button{background:var(--solid);color:var(--on-solid);border:0;
+  clip-path:polygon(7px 0,calc(100% - 7px) 0,100% 7px,100% calc(100% - 7px),
+    calc(100% - 7px) 100%,7px 100%,0 calc(100% - 7px),0 7px);
+  padding:9px 17px;font:inherit;font-size:13.5px;font-weight:500;cursor:pointer;
   white-space:nowrap;transition:opacity .12s}
 button:hover{opacity:.85}
 button:disabled{opacity:.4;cursor:default}
@@ -273,7 +315,7 @@ def _flag(turn: Turn) -> str:
     if not turn.note:
         return ""
     stop = " stop" if turn.failed or turn.untouched else ""
-    return f'<div class="flag{stop}">{escape(turn.note)}</div>'
+    return f'<div class="oct flag{stop}">{escape(turn.note)}</div>'
 
 
 def _changes(turn: Turn) -> str:
@@ -287,7 +329,9 @@ def _changes(turn: Turn) -> str:
 
 
 def _turn(turn: Turn) -> str:
-    parts = [f'<div class="asked">{escape(turn.asked)}</div>']
+    parts = [
+        f'<div class="asked-wrap oct edge"><div class="oct asked">{escape(turn.asked)}</div></div>'
+    ]
 
     reply = [f'<div class="reply">{_flag(turn)}']
     if turn.answer:
@@ -296,7 +340,7 @@ def _turn(turn: Turn) -> str:
     if turn.failed and turn.changes:
         reply.append(
             '<details class="original" open><summary>What Neutral would have removed'
-            '</summary><div class="raw"><div class="label">Computed locally, nothing '
+            '</summary><div class="oct raw"><div class="label">Computed locally, nothing '
             f"was sent</div>{_changes(turn)}</div></details>"
         )
 
@@ -305,7 +349,7 @@ def _turn(turn: Turn) -> str:
         reply.append(
             '<details class="original">'
             "<summary>Original response</summary>"
-            '<div class="raw"><div class="label">What the model said to your prompt '
+            '<div class="oct raw"><div class="label">What the model said to your prompt '
             "as written</div>"
             f'<div class="prose small">{markdown(turn.original_answer)}</div>'
             f"{_changes(turn)}</div></details>"
@@ -323,7 +367,8 @@ COMPOSER_JS = """
 (function(){
   var f=document.querySelector('form.composer'); if(!f) return;
   var t=f.querySelector('textarea');
-  function grow(){ t.style.height='auto'; t.style.height=Math.min(t.scrollHeight,180)+'px'; }
+  function grow(){ t.style.height='0px';
+    t.style.height=Math.max(26,Math.min(t.scrollHeight,180))+'px'; }
   t.addEventListener('input',grow); grow();
   t.addEventListener('keydown',function(e){
     if(e.key==='Enter' && !e.shiftKey && !e.isComposing){
@@ -343,11 +388,11 @@ COMPOSER_JS = """
 def _composer(*, opening: bool) -> str:
     label = "Start" if opening else "Send"
     return f"""<form class="composer" method="post" action="/">
-  <div class="box">
+  <div class="glow"><div class="oct edge"><div class="oct box">
     <textarea name="prompt" rows="1" autofocus
       placeholder="{escape(PLACEHOLDER) if opening else "Reply..."}"></textarea>
     <button type="submit">{label}</button>
-  </div>
+  </div></div></div>
   <p class="hint">Enter to send. Nothing is saved.</p>
 </form>"""
 
