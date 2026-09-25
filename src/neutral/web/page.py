@@ -73,48 +73,50 @@ CSS = """
    rather than approximated: text hsl(0 0% 9%) on hsl(0 0% 98%), borders at 92% light and
    18% dark, headings at weight 400 with tight negative tracking, 6px radii, and almost no
    colour at all. The restraint is the point - nothing here is decorative. */
+/* A deep, woody green - the reference is a panelled library, not a product page. The
+   light is confined to a band near the top and the plane falls away quickly to something
+   close to #001D00 at the foot. Ink is a warm parchment rather than white, because pure
+   white on green reads clinical and the brief was bookish. */
 :root{
-  --bg:hsl(150 20% 97%); --panel:hsl(150 30% 99.5%); --subtle:hsl(150 16% 94%);
-  --fg:hsl(0 0% 9%); --fg-2:hsl(0 0% 30%); --fg-3:hsl(0 0% 56%);
-  --line:hsl(150 12% 88%); --line-2:hsl(150 12% 84%);
-  --solid:hsl(0 0% 9%); --on-solid:hsl(0 0% 100%);
-  --amber:hsl(38 92% 45%);
+  --panel:hsl(150 18% 13%);
+  --subtle:hsl(152 18% 10%);
+  --fg:hsl(44 16% 92%);
+  --fg-2:hsl(140 9% 70%);
+  --fg-3:hsl(140 8% 53%);
+  --line:hsl(150 15% 22%);
+  --line-2:hsl(150 15% 29%);
+  --solid:hsl(44 16% 92%);
+  --on-solid:hsl(152 30% 8%);
+  --amber:hsl(38 76% 62%);
+  --hold:hsl(4 62% 62%);
   /* The corner cut. One value so every octagon agrees. */
   --cut:6px;
-  --glow-1:hsl(272 70% 58% / .10);
-  --glow-2:hsl(272 70% 58% / .05);
-  color-scheme:light;
-}
-@media(prefers-color-scheme:dark){:root:not([data-theme=light]){
-  --bg:hsl(150 12% 3%); --panel:hsl(150 10% 6%); --subtle:hsl(150 8% 11%);
-  --fg:hsl(0 0% 93%); --fg-2:hsl(0 0% 63%); --fg-3:hsl(0 0% 56%);
-  --line:hsl(150 6% 17%); --line-2:hsl(150 6% 22%);
-  --solid:hsl(0 0% 93%); --on-solid:hsl(0 0% 4%);
-  --amber:hsl(38 92% 58%);
-  --glow-1:hsl(272 80% 66% / .13);
-  --glow-2:hsl(272 80% 66% / .07);
+  --glow-1:hsl(272 60% 62% / .10);
+  --glow-2:hsl(272 60% 62% / .05);
+  --plane-foot:hsl(157 50% 3.5%);
   color-scheme:dark;
-}}
-@media(prefers-color-scheme:dark){:root:not([data-theme=light]) body{
-  background:linear-gradient(
-    180deg,
-    hsl(152 16% 13%) 0%,
-    hsl(156 17% 9%) 32%,
-    hsl(160 19% 5.5%) 68%,
-    hsl(165 22% 3%) 100%);
+}
+/* Dark preference goes a shade further down the same axis rather than to a different
+   palette - there is no light counterpart to design, because the design is dark. */
+@media(prefers-color-scheme:dark){:root:not([data-theme=light]){
+  --panel:hsl(150 17% 10.5%);
+  --subtle:hsl(152 16% 8%);
+  --line:hsl(150 14% 19%);
+  --line-2:hsl(150 14% 26%);
+  --plane-foot:hsl(159 55% 2%);
 }}
 *{box-sizing:border-box}
 html,body{height:100%}
 body{
   margin:0;color:var(--fg);
-  /* A green plane rather than a flat off-white: one soft wash from the top, over a
-     gradient that barely moves. Fixed, so it does not slide as the thread scrolls. */
   background:linear-gradient(
     180deg,
-    hsl(150 24% 93%) 0%,
-    hsl(154 19% 87%) 30%,
-    hsl(158 16% 79%) 65%,
-    hsl(163 14% 70%) 100%);
+    hsl(144 21% 27%) 0%,
+    hsl(147 25% 21%) 11%,
+    hsl(150 31% 14.5%) 26%,
+    hsl(152 37% 10%) 46%,
+    hsl(155 43% 6.5%) 72%,
+    var(--plane-foot) 100%);
   background-attachment:fixed;
   font-family:"Geist","Geist Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,
     "Helvetica Neue",Arial,sans-serif;
@@ -230,10 +232,9 @@ details.original>summary:hover,details.original[open]>summary{color:var(--fg-2);
 /* composer ------------------------------------------------------------------ */
 form.composer{position:sticky;bottom:0;padding:12px 0 0}
 form.composer.sticky::before{content:"";position:absolute;inset:-26px 0 auto 0;height:26px;
-  background:linear-gradient(to bottom, transparent, hsl(163 14% 70% / .92));
+  background:linear-gradient(to bottom, transparent, var(--plane-foot));
   pointer-events:none}
-@media(prefers-color-scheme:dark){:root:not([data-theme=light]) form.composer.sticky::before{
-  background:linear-gradient(to bottom, transparent, hsl(165 22% 3% / .92))}}
+
 .box{display:flex;gap:8px;align-items:flex-end;background:var(--panel);
   padding:9px 9px 9px 15px}
 textarea{flex:1;border:0;background:transparent;color:var(--fg);font:inherit;
@@ -260,7 +261,7 @@ button.ghost:hover{color:var(--fg-2);border-color:var(--line-2);opacity:1}
 .back{display:inline-block;margin-bottom:22px;font-size:13px;color:var(--fg-3);
   text-decoration:none}
 .back:hover{color:var(--fg-2)}
-.fillin{background:hsl(38 92% 50% / .18);border-bottom:1.5px solid var(--amber);
+.fillin{background:hsl(38 76% 62% / .16);border-bottom:1.5px solid var(--amber);
   padding:0 3px;border-radius:2px;font-weight:500}
 @media(max-width:640px){.opening h2{font-size:30px}.wrap{padding:16px 16px 24px}}
 """
