@@ -17,6 +17,7 @@ from html import escape
 
 from neutral.adapters.providers import ORDER, PROVIDERS
 from neutral.invariants import BANNER
+from neutral.web.legal import CONTACT
 from neutral.web.page import CORNER, CSS
 
 MODEL_JS = """
@@ -185,9 +186,89 @@ def signin_page(*, error: str = "", email: str = "") -> str:
     {_field("Password", "password", kind="password", autocomplete="current-password")}
     <button type="submit" class="wide">Sign in</button>
   </form>
+  <p class="alt"><a href="/forgot">Forgotten your password?</a></p>
   <p class="alt">No account yet? <a href="/signup">Create one</a></p>
 </div>"""
     return _shell("Sign in", body)
+
+
+# ---------------------------------------------------------------------------
+# forgotten passwords
+# ---------------------------------------------------------------------------
+
+
+def forgot_page(*, error: str = "", email: str = "", sent: bool = False) -> str:
+    """Ask for an address to send a reset link to.
+
+    The confirmation is deliberately the same whether or not that address has an account.
+    Telling an enquirer "no account here" turns this form into a way of asking who has
+    signed up, which is nobody's business but theirs.
+    """
+    if sent:
+        body = """<div class="card">
+  <h2>Check your email</h2>
+  <p class="lede">If that address has an account, a link to set a new password is on its
+  way. It works once and expires in an hour.</p>
+  <p class="alt"><a href="/signin">Back to sign in</a></p>
+</div>"""
+        return _shell("Check your email", body)
+
+    address = _field(
+        "Email",
+        "email",
+        kind="email",
+        value=email,
+        placeholder="you@company.com",
+        autofocus=True,
+        autocomplete="email",
+    )
+    body = f"""<div class="card">
+  <h2>Forgotten password</h2>
+  <p class="lede">Enter the address you signed up with and we will send a link to set a
+  new one.</p>
+  {_flag(error)}
+  <form method="post" action="/forgot">
+    {address}
+    <button type="submit" class="wide">Send the link</button>
+  </form>
+  <p class="alt"><a href="/signin">Back to sign in</a></p>
+</div>"""
+    return _shell("Forgotten password", body)
+
+
+def reset_page(token: str, *, error: str = "") -> str:
+    """Set a new password, having arrived from a link."""
+    secret = _field(
+        "New password",
+        "password",
+        kind="password",
+        placeholder="At least 10 characters",
+        autofocus=True,
+        autocomplete="new-password",
+    )
+    body = f"""<div class="card">
+  <h2>Set a new password</h2>
+  <p class="lede">This link works once. Choosing a new password signs out anywhere the
+  old one was used.</p>
+  {_flag(error)}
+  <form method="post" action="/reset">
+    <input type="hidden" name="token" value="{escape(token, quote=True)}">
+    {secret}
+    <button type="submit" class="wide">Set password and sign in</button>
+  </form>
+</div>"""
+    return _shell("Set a new password", body)
+
+
+def reset_unavailable_page() -> str:
+    """Shown when no email service is configured, instead of a promise nothing keeps."""
+    body = f"""<div class="card">
+  <h2>Reset is not set up yet</h2>
+  <p class="lede">Neutral cannot send email on this installation, so there is no way to
+  reset a password automatically. Email {escape(CONTACT)} and it will be done by hand.</p>
+  <p class="alt"><a href="/signin">Back to sign in</a></p>
+</div>"""
+    return _shell("Reset is not set up yet", body)
 
 
 # ---------------------------------------------------------------------------

@@ -33,21 +33,37 @@ model connection out even though their account survives.
 secret they control rather than the secret itself. That is a real integration, not a
 column in this database.
 
-## Accounts are the thinnest possible version
+## Accounts are still a thin version
 
-There is no password reset, no email verification, and no way to change an email address.
-Someone who forgets their password cannot get back in, and nothing stops a person signing
-up with an address that is not theirs. This is fine for a demonstration and is not fine
-for a customer; it is listed here so that nobody discovers it during a pilot.
+Password reset works: a single-use link, expiring in an hour, with only a hash of it
+stored. What is still missing:
 
-There is also no organisation, no roles and no sharing. Two colleagues at the same
-employer have two unrelated accounts and cannot see each other's work.
+- **No email verification at sign-up.** Anyone can sign up with an address that is not
+  theirs. The practical harm is small, because the real owner can take the account over
+  with a reset link — but it means the address on an account is not evidence of anything.
+- **No way to change an email address**, so an account is tied to the address it was made
+  with, forever.
+- **No organisation, no roles and no sharing.** Two colleagues at the same employer have
+  two unrelated accounts and cannot see each other's work.
 
-## Nothing is rate limited
+Reset also depends on an outbound email service being configured. Where it is not, the
+page says so plainly and points at a contact address rather than pretending a link is on
+its way — but on such an installation, a forgotten password is still a dead account until
+somebody fixes it by hand.
 
-An account can send as many prompts as the model provider will accept. Since the prompts
-go out on the user's own key and bill to their own account, the cost lands on them rather
-than on us — but there is no protection against a script hammering the sign-in form.
+## The rate limiting is a speed bump, not a defence
+
+The sign-in, sign-up and reset forms count failed attempts against both the address and
+the origin, and make you wait. That stops somebody working through a password list, and
+stops a script filling the database with junk accounts.
+
+It does not stop a large distributed attempt, and it is held in memory — so restarting
+the server clears every counter. Somebody who noticed that, and could force a restart,
+would have an unlimited number of guesses. Nothing here is a substitute for a real
+front-end defence if this ever carries something worth attacking.
+
+Prompts themselves are not limited at all. They go out on the user's own key and bill to
+their own account, so the cost lands on them rather than on us.
 
 ## The seed dataset was written by a language model
 

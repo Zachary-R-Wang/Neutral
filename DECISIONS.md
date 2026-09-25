@@ -5,6 +5,49 @@ minds. Newest first.
 
 ---
 
+## 2026-09-25 — Password reset and rate limiting, on the day the site went up
+
+**The instruction.** Fix the two gaps that had been named in LIMITATIONS.md for days and
+had just been written into CLAUDE.md §8 as the things a public sign-up form makes matter.
+"Rate limiting" is removed from the §8 list, dated, with the same treatment as accounts.
+
+**Reset links are stored as a hash, not as themselves.** What goes in the email never
+touches the disk. A stolen copy of accounts.db therefore contains no usable reset link,
+only the fingerprints of some — which is the same reasoning as passwords, one table over.
+A link lasts an hour, works once, and asking for a new one kills the old one so that a
+link sitting in an old email does not stay live.
+
+**The form answers identically whether or not the address exists.** A reset form that
+says "no account here" is a way of asking who has signed up, and the answer is nobody's
+business but theirs. The same page comes back either way; whether an email was actually
+sent is in the server log.
+
+**Only failures count towards a limit, and both the address and the origin are counted.**
+Counting successes would lock out the one person doing nothing wrong. Counting origin
+alone lets somebody spread guesses for one account across many machines; counting address
+alone lets one machine work through a list of addresses a few guesses each. A test holds
+the important consequence: once locked out, *the correct password stops working too* —
+otherwise the limit is decoration.
+
+**Behind a proxy, the origin is the forwarded address, not the proxy.** Every request to
+the deployed site arrives from Fly's proxy, so counting that would lock out every user at
+once the first time one person guessed. `fly-client-ip` is set by Fly itself and
+overwrites anything a caller sends, which is why it is preferred over `x-forwarded-for` —
+the latter can be written by whoever is calling, and on its own would let somebody defeat
+a per-origin limit by inventing a new origin each request.
+
+**Email is honest about not being configured.** With no mail service set up, the page says
+reset is unavailable and gives a contact address. Showing "check your inbox" when no inbox
+will ever receive anything is the kind of lie that has somebody refreshing their mail for
+ten minutes.
+
+**What this is not.** The limits live in memory, so a restart clears them. That is a
+speed bump sized for the nuisance a small site meets, not a security boundary, and
+LIMITATIONS.md says so in those words. Nothing here meters model use — that is billing,
+and billing is still out of scope.
+
+---
+
 ## 2026-09-25 — Neutral runs on a rented machine, and why it cannot be a static site
 
 **The instruction.** Put the site on neutralai.app, and remove "a deployment pipeline"

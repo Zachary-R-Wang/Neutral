@@ -36,10 +36,11 @@ import contextlib
 import hmac
 import os
 import re
+import secrets
 import sqlite3
 from dataclasses import dataclass
-from datetime import UTC, datetime
-from hashlib import scrypt
+from datetime import UTC, datetime, timedelta
+from hashlib import scrypt, sha256
 from pathlib import Path
 
 from neutral.adapters.providers import PROVIDERS, default_model_for
@@ -51,6 +52,22 @@ DEFAULT_DB = ROOT / "accounts.db"
 # column for prompt text or for an API key cannot be added without a test failing.
 COLUMNS = ("id", "email", "password", "provider", "model", "created_at")
 
+# The reset table, under the same rule. It holds a hash of a link that was emailed and
+# nothing about anybody. Note token_hash rather than token: what goes in the email is
+# never stored, so a copy of this database does not let anyone reset a password with it.
+RESET_COLUMNS = (
+    "id",
+    "account_id",
+    "token_hash",
+    "created_at",
+    "expires_at",
+    "used_at",
+)
+
+# How long a reset link works for. Long enough to find the email, short enough that one
+# left sitting in an inbox is not a spare key to the account.
+RESET_VALID_FOR = timedelta(hours=1)
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS accounts (
     id         INTEGER PRIMARY KEY,
@@ -60,6 +77,17 @@ CREATE TABLE IF NOT EXISTS accounts (
     model      TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS password_resets (
+    id         INTEGER PRIMARY KEY,
+    account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    token_hash TEXT NOT NULL UNIQUE,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    used_at    TEXT
+);
+
+CREATE INDEX IF NOT EXISTS reset_by_account ON password_resets(account_id);
 """
 
 MIN_PASSWORD = 10
@@ -274,3 +302,121 @@ def still_on_disk(db: sqlite3.Connection) -> bool:
     """False when the file behind this connection has gone away."""
     path = file_for(db)
     return not path or Path(path).exists()
+
+
+# ---------------------------------------------------------------------------
+# forgotten passwords
+# ---------------------------------------------------------------------------
+
+
+def _fingerprint(token: str) -> str:
+    """What gets stored. The token itself only ever exists in the email."""
+    return sha256(token.encode()).hexdigest()
+
+
+def begin_reset(db: sqlite3.Connection, email: str) -> tuple[Account, str] | None:
+    """Start a reset. Returns the account and the token to email, or None.
+
+    None means no account for that address. The caller must say the same thing either
+    way - a form that answers differently is a way of asking whether somebody has an
+    account here, which is not the enquirer's business.
+    """
+    address = normalise_email(email)
+    try:
+        row = db.execute("SELECT * FROM accounts WHERE email = ?", (address,)).fetchone()
+        if row is None:
+            return None
+
+        # Any link sent earlier stops working now. Asking for a new one should not leave
+        # the old one live in an inbox somewhere.
+        db.execute(
+            "DELETE FROM password_resets WHERE account_id = ? AND used_at IS NULL",
+            (row["id"],),
+        )
+        token = secrets.token_urlsafe(32)
+        now = datetime.now(UTC)
+        db.execute(
+            "INSERT INTO password_resets "
+            "(account_id, token_hash, created_at, expires_at) VALUES (?, ?, ?, ?)",
+            (
+                row["id"],
+                _fingerprint(token),
+                now.isoformat(timespec="seconds"),
+                (now + RESET_VALID_FOR).isoformat(timespec="seconds"),
+            ),
+        )
+        db.commit()
+    except sqlite3.Error as exc:
+        raise AccountError(STORAGE_HELP) from exc
+
+    account = Account(
+        id=int(row["id"]), email=row["email"], provider=row["provider"], model=row["model"]
+    )
+    return account, token
+
+
+def check_reset(db: sqlite3.Connection, token: str) -> Account:
+    """Return the account a token belongs to, or raise if it cannot be used."""
+    if not token:
+        raise AccountError("That reset link is not valid. Ask for a new one.")
+    try:
+        row = db.execute(
+            "SELECT r.id AS reset_id, r.expires_at, r.used_at, a.* "
+            "FROM password_resets r JOIN accounts a ON a.id = r.account_id "
+            "WHERE r.token_hash = ?",
+            (_fingerprint(token),),
+        ).fetchone()
+    except sqlite3.Error as exc:
+        raise AccountError(STORAGE_HELP) from exc
+
+    if row is None or row["used_at"] is not None:
+        raise AccountError(
+            "That reset link has already been used, or is not valid. Ask for a new one."
+        )
+    if datetime.fromisoformat(row["expires_at"]) < datetime.now(UTC):
+        raise AccountError("That reset link has expired. Ask for a new one.")
+
+    return Account(
+        id=int(row["id"]), email=row["email"], provider=row["provider"], model=row["model"]
+    )
+
+
+def complete_reset(db: sqlite3.Connection, token: str, password: str) -> Account:
+    """Set a new password and spend the link. Raises if the link or password is no good."""
+    account = check_reset(db, token)
+    if len(password) < MIN_PASSWORD:
+        raise AccountError(
+            f"That password is {len(password)} characters. Use at least {MIN_PASSWORD}."
+        )
+    try:
+        db.execute(
+            "UPDATE accounts SET password = ? WHERE id = ?",
+            (hash_password(password), account.id),
+        )
+        # Spend this link, and drop every other one for the account. Whoever just proved
+        # they hold the mailbox gets one door, not a set of them.
+        db.execute(
+            "UPDATE password_resets SET used_at = ? WHERE token_hash = ?",
+            (_now(), _fingerprint(token)),
+        )
+        db.execute(
+            "DELETE FROM password_resets WHERE account_id = ? AND used_at IS NULL",
+            (account.id,),
+        )
+        db.commit()
+    except sqlite3.Error as exc:
+        raise AccountError(STORAGE_HELP) from exc
+    return account
+
+
+def forget_expired_resets(db: sqlite3.Connection) -> int:
+    """Drop links that can no longer be used. Nothing needs them after they expire."""
+    try:
+        cursor = db.execute(
+            "DELETE FROM password_resets WHERE expires_at < ? OR used_at IS NOT NULL",
+            (_now(),),
+        )
+        db.commit()
+    except sqlite3.Error:
+        return 0
+    return cursor.rowcount or 0

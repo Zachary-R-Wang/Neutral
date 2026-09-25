@@ -294,8 +294,8 @@ author's. Subject to every constraint in §3.
 ## 8. Out of scope for the MVP
 
 Do not build: billing, multi-tenancy, an admin dashboard, a browser extension, an API
-key management system, rate limiting, or a marketing site. If a task seems to require
-one, it does not — say so and move on.
+key management system, or a marketing site. If a task seems to require one, it does not —
+say so and move on.
 
 **Amended 2026-09-24, on the founder's written instruction**, which was to build accounts
 and logins and let a person use their own API key against more than one model, "so that
@@ -324,10 +324,22 @@ up, and the things `LIMITATIONS.md` lists as missing are still missing once it i
 Two of those become sharper the moment there is a public link, and they are named here so
 that going live is not mistaken for being finished:
 
-- **There is no password reset.** A person who forgets their password cannot get back in
-  and cannot be helped, because there is no verified address to send a reset to.
-- **There is no rate limiting**, which stays forbidden above. Nothing stops a script
-  hammering the sign-in form.
+**Amended again the same day**, on the founder's instruction, after the site went up:
+build the password reset and the rate limiting. "Rate limiting" is removed from the list
+above. Both were named here hours earlier as the things a public sign-up form makes
+matter, and leaving them open while the domain points at it was the wrong trade.
+
+What this permits is narrow: a limit on how often the sign-in, sign-up and
+password-reset forms can be hit, and a reset flow that emails a single-use link. It does
+not permit per-customer quotas, billing tiers, or anything that meters use of a model —
+those are billing, which is still forbidden.
+
+The reset link needs somewhere to send from, so a second table and an outbound email
+service enter the design. **S5 is unchanged by this.** The rule has always been that
+prompt text, and anyone named inside a prompt, are never written down. A reset token
+belongs to the account holder's own login, like the password hash, and the same
+structural check applies: the table declares its complete column list and a test asserts
+it, so it cannot grow a column for prompt text or an API key.
 
 Anything beyond that list is a new instruction, not an extension of this one.
 

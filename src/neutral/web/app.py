@@ -22,11 +22,20 @@ import traceback
 from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from neutral import accounts, errors
+from neutral import accounts, errors, mailer
 from neutral.accounts import AccountError
 from neutral.adapters.providers import PROVIDERS, build, label_for
 from neutral.conversation import Conversation, ask
-from neutral.web.access import connect_page, signin_page, signup_page, trouble_page
+from neutral.throttle import RESET, SIGN_IN, SIGN_UP, Throttle, wait_message
+from neutral.web.access import (
+    connect_page,
+    forgot_page,
+    reset_page,
+    reset_unavailable_page,
+    signin_page,
+    signup_page,
+    trouble_page,
+)
 from neutral.web.legal import PRIVACY, TERMS
 from neutral.web.page import legal_page, page
 from neutral.web.sessions import COOKIE, Session, Sessions
@@ -34,6 +43,30 @@ from neutral.web.sessions import COOKIE, Session, Sessions
 app = FastAPI(title="Neutral", docs_url=None, redoc_url=None)
 
 sessions = Sessions()
+
+# Guessing costs something now. Only failures count, so somebody using the site normally
+# never meets these - see the reasoning in neutral/throttle.py.
+sign_in_limit = Throttle(SIGN_IN)
+sign_up_limit = Throttle(SIGN_UP)
+reset_limit = Throttle(RESET)
+
+
+def client_ip(request: Request) -> str:
+    """Who is asking, as well as that can be known from behind a proxy.
+
+    Fly sets fly-client-ip itself and overwrites anything a caller sent, so it is the one
+    to trust where it exists. x-forwarded-for is a fallback and can be written by whoever
+    is calling, which is why it is not preferred: on its own it would let somebody defeat
+    a per-origin limit by inventing a new origin each time.
+    """
+    direct = request.headers.get("fly-client-ip", "").strip()
+    if direct:
+        return f"ip:{direct}"
+    forwarded = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+    if forwarded:
+        return f"ip:{forwarded}"
+    return f"ip:{request.client.host if request.client else 'unknown'}"
+
 
 UNEXPECTED = (
     "Neutral hit a problem it did not expect and stopped rather than guessing. Nothing "
@@ -192,10 +225,19 @@ def signup_form(request: Request):
 @app.post("/signup", response_class=HTMLResponse)
 def signup(request: Request, email: str = Form(default=""), password: str = Form(default="")):
     key, session = _session(request)
+    origin = client_ip(request)
+
+    waiting = sign_up_limit.retry_after(origin)
+    if waiting:
+        return _html(signup_page(error=wait_message(waiting), email=email), key)
+
     try:
         account = accounts.create(db(), email, password)
     except AccountError as exc:
         return _html(signup_page(error=str(exc), email=email), key)
+    # Counted on success, not on failure: the cost being limited here is accounts
+    # existing, not people mistyping their own address.
+    sign_up_limit.record(origin)
     session.adopt(account)
     return _go("/connect", key)
 
@@ -215,10 +257,22 @@ def signin_form(request: Request):
 @app.post("/signin", response_class=HTMLResponse)
 def signin(request: Request, email: str = Form(default=""), password: str = Form(default="")):
     key, session = _session(request)
+    origin = client_ip(request)
+    address = f"email:{accounts.normalise_email(email)}"
+
+    # Both the machine and the address are counted. Either alone leaves a way round:
+    # many machines against one account, or one machine against many accounts.
+    waiting = sign_in_limit.retry_after(origin, address)
+    if waiting:
+        return _html(signin_page(error=wait_message(waiting), email=email), key)
+
     try:
         account = accounts.authenticate(db(), email, password)
     except AccountError as exc:
+        sign_in_limit.record(origin, address)
         return _html(signin_page(error=str(exc), email=email), key)
+
+    sign_in_limit.clear(origin, address)
     session.adopt(account)
     return _go("/connect", key)
 
@@ -231,6 +285,80 @@ def signout(request: Request):
     response = RedirectResponse("/signin", status_code=303)
     response.delete_cookie(COOKIE)
     return response
+
+
+# ---------------------------------------------------------------------------
+# forgotten passwords
+# ---------------------------------------------------------------------------
+
+
+@app.get("/forgot", response_class=HTMLResponse)
+def forgot_form(request: Request):
+    key, _ = _session(request)
+    if not mailer.configured():
+        return _html(reset_unavailable_page(), key)
+    return _html(forgot_page(), key)
+
+
+@app.post("/forgot", response_class=HTMLResponse)
+def forgot(request: Request, email: str = Form(default="")):
+    """Email a reset link, and say the same thing whether or not there was an account."""
+    key, _ = _session(request)
+    if not mailer.configured():
+        return _html(reset_unavailable_page(), key)
+
+    origin = client_ip(request)
+    address = f"reset:{accounts.normalise_email(email)}"
+    waiting = reset_limit.retry_after(origin, address)
+    if waiting:
+        return _html(forgot_page(error=wait_message(waiting), email=email), key)
+    reset_limit.record(origin, address)
+
+    try:
+        started = accounts.begin_reset(db(), email)
+    except AccountError as exc:
+        return _html(forgot_page(error=str(exc), email=email), key)
+
+    if started is not None:
+        account, token = started
+        link = str(request.url_for("reset_form").include_query_params(token=token))
+        subject, message = mailer.reset_email(link)
+        mailer.send(account.email, subject, message)
+
+    # The same page either way. Whether the send failed is in the server log, not here:
+    # a different answer for an address that exists turns this form into a way of asking
+    # who has an account.
+    return _html(forgot_page(sent=True), key)
+
+
+@app.get("/reset", response_class=HTMLResponse, name="reset_form")
+def reset_form(request: Request, token: str = ""):
+    key, _ = _session(request)
+    try:
+        accounts.check_reset(db(), token)
+    except AccountError as exc:
+        return _html(forgot_page(error=str(exc)), key)
+    return _html(reset_page(token), key)
+
+
+@app.post("/reset", response_class=HTMLResponse)
+def reset(request: Request, token: str = Form(default=""), password: str = Form(default="")):
+    """Set the new password and sign in, so nobody has to type it twice."""
+    key, session = _session(request)
+    try:
+        account = accounts.complete_reset(db(), token, password)
+    except AccountError as exc:
+        try:
+            accounts.check_reset(db(), token)
+        except AccountError:
+            # The link itself is spent or expired; sending them back to the password
+            # form would just fail again.
+            return _html(forgot_page(error=str(exc)), key)
+        return _html(reset_page(token, error=str(exc)), key)
+
+    sign_in_limit.clear(client_ip(request), f"email:{account.email}")
+    session.adopt(account)
+    return _go("/connect", key)
 
 
 # ---------------------------------------------------------------------------

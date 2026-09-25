@@ -188,6 +188,11 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setenv("NEUTRAL_ACCOUNTS_DB", str(path))
     monkeypatch.setattr(app_module, "_db", None)
     monkeypatch.setattr(app_module, "sessions", Sessions())
+    # The limits are deliberately process-wide in production. In a suite that signs up
+    # dozens of times from one address that is cross-contamination, so each test starts
+    # with them empty - except the ones below that are about the limits themselves.
+    for limit in (app_module.sign_in_limit, app_module.sign_up_limit, app_module.reset_limit):
+        limit.reset()
     _Adapter.built = []
     monkeypatch.setattr(
         app_module,
@@ -566,9 +571,16 @@ class TestTheKeyIsNeverWrittenDown:
             client.post("/", data={"prompt": f"Assess Ravi Menon, question {i}."})
 
         raw = sqlite3.connect(client.db_path)
-        tables = [r[0] for r in raw.execute("SELECT name FROM sqlite_master WHERE type='table'")]
-        assert tables == ["accounts"]
+        tables = sorted(
+            r[0]
+            for r in raw.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            if not r[0].startswith("sqlite_")
+        )
+        assert tables == ["accounts", "password_resets"]
         assert raw.execute("SELECT COUNT(*) FROM accounts").fetchone()[0] == 1
+        # Three conversations, and the reset table is untouched. Asking for a link is
+        # the only thing that should ever put a row in it.
+        assert raw.execute("SELECT COUNT(*) FROM password_resets").fetchone()[0] == 0
 
 
 class TestTheKeyIsNeverShownBack:
