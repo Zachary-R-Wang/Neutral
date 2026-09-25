@@ -57,7 +57,12 @@ lint: .venv
 	@$(PY) -m ruff check src tests tools
 	@$(PY) -m ruff format --check src tests tools
 
-# Nothing reaches the live site unless the tests and the linter pass first. Each step is
+# Nothing reaches the live site unless the tests and the linter pass first.
+#
+# --depot-scope=app builds on a builder belonging to this app rather than the one shared
+# across the account. On 2026-09-25 the shared one wedged - every deploy hung at
+# "Waiting for depot builder" or failed with a 500 - and an app-scoped one worked first
+# time. Each step is
 # its own line, so a failure stops make outright - piping a check into something else
 # would report the last command's success and carry on past it.
 deploy: .venv
@@ -73,7 +78,7 @@ deploy: .venv
 	@$(RUN) tools/run_tests.py
 	@echo ""
 	@echo "Deploying to neutralai.app. This takes a few minutes."
-	@flyctl deploy --remote-only --now || { \
+	@flyctl deploy --remote-only --depot-scope=app --now || { \
 		echo ""; \
 		echo "  The deploy failed on Fly's side, not in this code - the tests passed."; \
 		echo "  Usually temporary. Wait a few minutes and run make deploy again."; \
