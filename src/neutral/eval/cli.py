@@ -235,6 +235,82 @@ def neutral_transform(prompt: str) -> str:
         return prompt
 
 
+def compare_runs(args: argparse.Namespace) -> int:
+    """Put the two arms side by side and judge them against the pre-registered threshold."""
+    from neutral.eval.compare import compare_reports
+
+    try:
+        found = compare_reports(Path(args.baseline), Path(args.neutral))
+    except FileNotFoundError as exc:
+        print(f"\n  Cannot find {exc.filename}.\n")
+        return 1
+
+    base, neut, overall = found["baseline"], found["neutral"], found["overall"]
+
+    problems = list(base["validity_problems"]) + list(neut["validity_problems"])
+    if base["dataset_hash"] != neut["dataset_hash"]:
+        problems.append("The two runs used different datasets, so they cannot be compared.")
+    if base["subject_model"] != neut["subject_model"]:
+        problems.append("The two runs measured different models.")
+    if base["runs_per_variant"] != neut["runs_per_variant"]:
+        problems.append("The two runs used a different number of runs per variant.")
+
+    print(f"\n  Dataset:          {base['dataset_hash'][:16]}  ({overall.pairs} pairs in both)")
+    print(f"  Model measured:   {base['subject_model']}")
+    print(f"  Runs per variant: {base['runs_per_variant']}")
+    print()
+    print("  " + "=" * 68)
+    print(f"  Identity effect, no Neutral:   {overall.baseline:6.2f}")
+    print(f"  Identity effect, with Neutral: {overall.neutral:6.2f}")
+    print(
+        f"  Reduction:                     {overall.reduction_pct:6.1f}%"
+        f"  (95% CI {overall.reduction_low:.1f}% to {overall.reduction_high:.1f}%)"
+    )
+    print("  " + "=" * 68)
+    print()
+
+    if problems:
+        print("  THIS IS NOT A MEASUREMENT:")
+        for problem in problems:
+            print(f"    - {problem}")
+        print()
+        return 1
+
+    print("  By what the pair varies:\n")
+    print(f"    {'':18} {'before':>8} {'after':>8} {'change':>9}")
+    for c in sorted(found["by_signal"], key=lambda c: -c.baseline):
+        mark = "better" if c.improved else ("WORSE" if c.worsened else "")
+        print(f"    {c.label:18} {c.baseline:8.2f} {c.neutral:8.2f} {c.change:+9.2f}  {mark}")
+
+    print("\n  By task:\n")
+    print(f"    {'':24} {'before':>8} {'after':>8} {'change':>9}")
+    for c in sorted(found["by_category"], key=lambda c: -c.baseline):
+        mark = "better" if c.improved else ("WORSE" if c.worsened else "")
+        print(f"    {c.label:24} {c.baseline:8.2f} {c.neutral:8.2f} {c.change:+9.2f}  {mark}")
+
+    print()
+    print("  Against the threshold set in BASELINE.md before any number existed:\n")
+    tick = lambda ok: "PASS" if ok else "FAIL"  # noqa: E731
+    reduction_ok = overall.reduction_pct >= 60.0
+    certain_ok = overall.reduction_low > 0
+    no_harm_ok = not found["categories_worse"]
+    print(
+        f"    1. At least a 60% reduction ........ {tick(reduction_ok)}"
+        f"   ({overall.reduction_pct:.1f}%)"
+    )
+    print(
+        f"    2. Interval excludes zero .......... {tick(certain_ok)}"
+        f"   (low end {overall.reduction_low:.1f}%)"
+    )
+    print(
+        f"    3. No task category made worse ..... {tick(no_harm_ok)}"
+        + (f"   ({', '.join(found['categories_worse'])})" if not no_harm_ok else "")
+    )
+    print()
+    print(f"  OVERALL: {'PASS' if found['passes'] else 'DOES NOT PASS'}\n")
+    return 0
+
+
 def run_eval(args: argparse.Namespace) -> int:
     from neutral.eval.report import write_html, write_json
     from neutral.eval.runner import estimate_run_cost, no_transform, run_evaluation
@@ -407,6 +483,11 @@ def main(argv: list[str] | None = None) -> int:
         "--estimate", action="store_true", help="print the cost and exit without calling anything"
     )
     p_run.add_argument("--yes", action="store_true", help="skip the spend confirmation")
+
+    p_compare = sub.add_parser("compare", help="judge a Neutral run against a baseline run")
+    p_compare.add_argument("baseline", help="the JSON report from the run with no Neutral")
+    p_compare.add_argument("neutral", help="the JSON report from the run with --with-neutral")
+    p_compare.set_defaults(func=compare_runs)
     p_run.add_argument(
         "--with-neutral",
         action="store_true",
