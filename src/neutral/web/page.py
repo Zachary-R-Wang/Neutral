@@ -308,7 +308,13 @@ button.wide{width:100%;justify-content:center;padding:12px 17px;font-size:14px;
 /* the provider choice, as a segmented row of octagons */
 .choice{display:flex;gap:7px;flex-wrap:wrap}
 .choice label{flex:1 1 0;min-width:88px;cursor:pointer}
-.choice input{position:absolute;opacity:0;pointer-events:none}
+/* The real radio is hidden and the pill beside it is what you see. It must be given a
+   size of its own: `.field input` sets width:100%, and an absolutely positioned input
+   resolves that against .wrap, so each of these silently became 720px wide and pushed
+   the page sideways. Clipped to a pixel rather than display:none, which would take it
+   out of the tab order. */
+.choice input{position:absolute;opacity:0;pointer-events:none;
+  width:1px;height:1px;margin:0;padding:0}
 .choice .pill{display:block;text-align:center;background:var(--panel);
   border:1px solid var(--panel-line);padding:9px 6px;font-size:13.5px;
   color:var(--on-panel-2);transition:border-color .12s,color .12s,background .12s;
@@ -320,6 +326,19 @@ button.wide{width:100%;justify-content:center;padding:12px 17px;font-size:14px;
 .choice input:focus-visible+.pill{outline:2px solid var(--accent);outline-offset:2px}
 /* one model list per provider; JS shows the one that matches the choice */
 .models[hidden]{display:none}
+/* Model pills size to their text and wrap, unlike the provider row where four equal
+   columns is the point. Set in the mono face because a model id is an exact string, and
+   because it keeps this row from reading as a second copy of the one above it. */
+.choice.free label{flex:0 1 auto;min-width:0}
+.choice.free .pill{font-family:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  font-size:12px;padding:8px 11px;letter-spacing:-.01em}
+.field .or{display:block;font-size:12px;color:var(--fg-3);margin:13px 0 6px;
+  letter-spacing:-.005em}
+/* The free model field is optional and takes the same kind of string as the pills, so it
+   is set in the same face and sits a little lighter than the key field below it, which
+   is not optional. */
+.field input#model_other{font-family:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,
+  monospace;font-size:12.5px;padding:8px 0}
 /* who is signed in, in the header */
 .top.tight{padding-bottom:13px}
 .idbar{display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding-bottom:26px;
@@ -331,7 +350,17 @@ button.wide{width:100%;justify-content:center;padding:12px 17px;font-size:14px;
 .idbar form:last-child{margin-left:auto}
 .notice{white-space:nowrap}
 .sep{color:var(--line-2)}
-@media(max-width:640px){.card h2{font-size:26px}}
+@media(max-width:640px){
+  .card h2{font-size:26px}
+  /* The banner is held on one line so it cannot crowd the account row beneath it. On a
+     phone there is no width for that, and nowrap would drag the whole page sideways. */
+  .top{flex-wrap:wrap;align-items:flex-start}
+  .notice{white-space:normal;margin-left:0;flex:1 1 100%}
+  /* There is no spare width on a phone for the corner to occupy, and at its full size
+     it sits behind the line explaining where the API key goes - which is the one line
+     on this page that has to be readable. */
+  .corner{width:min(62vw,240px);height:min(26vh,200px)}
+}
 """
 
 

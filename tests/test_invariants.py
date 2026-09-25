@@ -328,7 +328,7 @@ class TestS5HoldsNowThatAccountsExist:
                 "/connect",
                 data={
                     "provider": "anthropic",
-                    "model_anthropic": "claude-sonnet-5",
+                    "model_anthropic": "claude-opus-5-5",
                     "api_key": key,
                 },
             )

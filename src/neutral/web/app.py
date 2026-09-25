@@ -252,8 +252,9 @@ async def connect(request: Request):
     provider = str(form.get("provider") or "anthropic")
     if provider not in PROVIDERS:
         provider = "anthropic"
-    # One list per provider, so the chosen one names its own field.
-    model = str(form.get(f"model_{provider}") or "")
+    # One list per provider, so the chosen one names its own field. A name typed into
+    # the free field wins over the pills, since typing it is the more deliberate act.
+    model = str(form.get("model_other") or "").strip() or str(form.get(f"model_{provider}") or "")
     api_key = str(form.get("api_key") or "").strip()
 
     def again(message: str):

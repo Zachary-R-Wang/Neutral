@@ -211,25 +211,48 @@ def _providers_field(selected: str) -> str:
 
 
 def _models_field(selected_provider: str, selected_model: str) -> str:
-    lists = []
+    """The model choice, as octagons rather than a dropdown.
+
+    A native <select> opens the operating system's own menu, which arrives in whatever
+    the machine's chrome looks like and has nothing to do with the rest of this page.
+    These are the same pills as the provider row above, one row per provider, with the
+    flagship first because it is also the default.
+
+    Underneath is a field for anything not listed. The list is a convenience and never a
+    restriction - vendors rename models faster than this file gets edited, and anyone on
+    a custom deployment or a fine-tune would never find themselves on it.
+    """
+    known = {name for spec in PROVIDERS.values() for name in spec.models}
+    typed = selected_model if selected_model and selected_model not in known else ""
+
+    rows = []
     for key in ORDER:
         spec = PROVIDERS[key]
-        options = "".join(
-            f'<option value="{escape(name, quote=True)}"'
-            f"{' selected' if name == selected_model else ''}>{escape(name)}</option>"
+        # Every row checks one of its OWN models. Testing against the model chosen for
+        # some other provider leaves the whole row blank the moment you switch provider.
+        checked = selected_model if selected_model in spec.models else spec.models[0]
+        pills = "".join(
+            f"""<label>
+        <input type="radio" name="model_{key}" value="{escape(name, quote=True)}"
+          {"checked" if name == checked else ""}>
+        <span class="pill">{escape(name)}</span>
+      </label>"""
             for name in spec.models
         )
         hidden = "" if key == selected_provider else " hidden"
-        lists.append(
-            f"""<div class="models" data-provider="{key}"{hidden}>
-    <div class="glow"><div class="oct edge on-light"><div class="oct pad">
-      <select name="model_{key}" aria-label="{escape(spec.label)} model">{options}</select>
-    </div></div></div>
-  </div>"""
+        rows.append(
+            f'<div class="models" data-provider="{key}"{hidden}>'
+            f'<div class="choice free">{pills}</div></div>'
         )
+
     return f"""<div class="field">
   <label>Model</label>
-  {"".join(lists)}
+  {"".join(rows)}
+  <label class="or" for="model_other">or type any model name your provider accepts</label>
+  <div class="glow"><div class="oct edge on-light"><div class="oct pad">
+    <input id="model_other" name="model_other" type="text" autocomplete="off"
+      value="{escape(typed, quote=True)}" placeholder="Leave empty to use the choice above">
+  </div></div></div>
 </div>"""
 
 

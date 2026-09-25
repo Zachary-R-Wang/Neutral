@@ -7,6 +7,21 @@ before the numbers arrive is a design note; one added afterwards looks like an e
 
 ---
 
+## The model lists will go stale again
+
+The models offered for each provider were checked against vendor documentation on
+2026-09-25 and will be wrong again within weeks, because five vendors ship new flagships
+on their own schedules and nothing here watches for that.
+
+This is survivable rather than fixed: the connect page accepts any model name typed in,
+so a model missing from the list is an inconvenience rather than a wall. But somebody
+being shown this in six months will see out-of-date names in the picker and reasonably
+wonder what else has not been maintained.
+
+**What would fix it.** Reading each provider's own models endpoint at startup instead of
+listing them here. That is four more API calls and four more failure modes on a page that
+currently needs none, which is why it was not done for the MVP.
+
 ## You have to paste your API key every session
 
 The key is held in memory and discarded when the server stops or the session goes idle for

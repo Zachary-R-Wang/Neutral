@@ -10,6 +10,7 @@ and they are the ones that should fail loudly if somebody later adds a convenien
 
 from __future__ import annotations
 
+import re
 import sqlite3
 
 import pytest
@@ -18,6 +19,7 @@ from fastapi.testclient import TestClient
 from neutral import accounts
 from neutral.accounts import COLUMNS, AccountError
 from neutral.adapters.base import Completion
+from neutral.adapters.providers import PROVIDERS
 from neutral.conversation import Conversation
 from neutral.web import app as app_module
 from neutral.web.sessions import Session, Sessions
@@ -110,13 +112,13 @@ class TestTheRememberedModel:
     def test_a_new_account_starts_with_a_working_default(self, db):
         account = accounts.create(db, EMAIL, PASSWORD)
         assert account.provider == "anthropic"
-        assert account.model == "claude-sonnet-5"
+        assert account.model == "claude-opus-5-5"
 
     def test_a_choice_survives_signing_out_and_back_in(self, db):
         account = accounts.create(db, EMAIL, PASSWORD)
-        accounts.set_model(db, account.id, "google", "gemini-2.5-flash")
+        accounts.set_model(db, account.id, "google", "gemini-3.7-flash")
         again = accounts.authenticate(db, EMAIL, PASSWORD)
-        assert (again.provider, again.model) == ("google", "gemini-2.5-flash")
+        assert (again.provider, again.model) == ("google", "gemini-3.7-flash")
 
     def test_an_unknown_provider_is_refused(self, db):
         account = accounts.create(db, EMAIL, PASSWORD)
@@ -125,7 +127,7 @@ class TestTheRememberedModel:
 
     def test_an_empty_model_falls_back_to_that_providers_default(self, db):
         account = accounts.create(db, EMAIL, PASSWORD)
-        assert accounts.set_model(db, account.id, "xai", "  ").model == "grok-4"
+        assert accounts.set_model(db, account.id, "xai", "  ").model == "grok-4.7"
 
 
 # ---------------------------------------------------------------------------
@@ -148,15 +150,15 @@ class TestSessionsLiveAndDie:
     def test_nothing_is_ready_until_there_is_both_an_account_and_a_key(self):
         session = Session()
         assert not session.ready
-        session.adopt(accounts.Account(1, EMAIL, "openai", "gpt-5"))
+        session.adopt(accounts.Account(1, EMAIL, "openai", "gpt-6-astra"))
         assert session.signed_in and not session.ready
-        session.connect("openai", "gpt-5", KEY)
+        session.connect("openai", "gpt-6-astra", KEY)
         assert session.ready
 
     def test_signing_out_takes_the_key_and_the_conversation(self):
         session = Session()
-        session.adopt(accounts.Account(1, EMAIL, "anthropic", "claude-sonnet-5"))
-        session.connect("anthropic", "claude-sonnet-5", KEY)
+        session.adopt(accounts.Account(1, EMAIL, "anthropic", "claude-opus-5-5"))
+        session.connect("anthropic", "claude-opus-5-5", KEY)
         session.conversation = Conversation()
         session.sign_out()
         assert session.api_key == "" and not session.signed_in
@@ -246,11 +248,11 @@ class TestTheUserChoosesWhereTheirPromptGoes:
     @pytest.mark.parametrize(
         ("provider", "model"),
         [
-            ("anthropic", "claude-opus-5"),
-            ("openai", "gpt-5-mini"),
-            ("google", "gemini-2.5-flash"),
-            ("xai", "grok-3"),
-            ("deepseek", "deepseek-reasoner"),
+            ("anthropic", "claude-sonnet-5"),
+            ("openai", "gpt-6-sol"),
+            ("google", "gemini-3.7-flash"),
+            ("xai", "grok-4.6"),
+            ("deepseek", "deepseek-v4-pro"),
         ],
     )
     def test_the_chosen_provider_and_model_are_what_gets_used(self, client, provider, model):
@@ -261,9 +263,9 @@ class TestTheUserChoosesWhereTheirPromptGoes:
 
     def test_the_header_says_which_model_is_connected(self, client):
         _sign_up(client)
-        _connect(client, "google", "gemini-2.5-pro")
+        _connect(client, "google", "gemini-3.8-flash")
         page = client.get("/").text
-        assert "Gemini gemini-2.5-pro" in page
+        assert "Gemini gemini-3.8-flash" in page
         assert EMAIL in page
 
     def test_a_missing_key_is_refused_in_plain_english(self, client):
@@ -318,6 +320,80 @@ class TestTheFirstPageSaysWhatTheProductIs:
         assert self.EXPLANATION in client.get("/").text
 
 
+class TestPickingAModel:
+    """The model choice is not a dropdown, and not a closed list."""
+
+    def test_no_page_uses_a_native_dropdown(self, client):
+        """A <select> opens the operating system's own menu, which is not this design."""
+        _sign_up(client)
+        assert "<select" not in client.get("/connect").text
+
+    @pytest.mark.parametrize("provider", sorted(PROVIDERS))
+    def test_the_flagship_is_listed_first_and_is_the_default(self, provider):
+        spec = PROVIDERS[provider]
+        assert spec.default_model == spec.models[0]
+
+    @pytest.mark.parametrize("provider", sorted(PROVIDERS))
+    def test_every_listed_model_is_offered_on_the_page(self, client, provider):
+        _sign_up(client)
+        body = client.get("/connect").text
+        for name in PROVIDERS[provider].models:
+            assert f'value="{name}"' in body, f"{name} is not offered"
+
+    @pytest.mark.parametrize("viewing", sorted(PROVIDERS))
+    def test_every_providers_row_has_exactly_one_model_chosen(self, client, viewing):
+        """Switching provider must not leave the model row with nothing selected.
+
+        Each row used to be checked against the model picked for whichever provider was
+        current, so every other row came up blank.
+        """
+        _sign_up(client)
+        _connect(client, viewing, PROVIDERS[viewing].models[-1])
+        body = client.get("/connect?change=1").text
+
+        for key, spec in PROVIDERS.items():
+            row = re.search(rf'data-provider="{key}".*?</div></div>', body, re.S)
+            assert row, f"no model row for {key}"
+            chosen = re.findall(r'value="([^"]+)"[^>]*\s*checked', row.group(0))
+            assert len(chosen) == 1, f"{key} has {len(chosen)} models chosen, not 1"
+            assert chosen[0] in spec.models
+
+    def test_a_model_name_that_is_not_on_the_list_can_still_be_used(self, client):
+        """Vendors rename models faster than this file gets edited."""
+        _sign_up(client)
+        client.post(
+            "/connect",
+            data={
+                "provider": "openai",
+                "model_openai": "gpt-6-luna",
+                "model_other": "  ft:my-private-tune  ",
+                "api_key": KEY,
+            },
+            follow_redirects=False,
+        )
+        client.post("/", data={"prompt": "Assess Ravi."}, follow_redirects=False)
+        assert _Adapter.built == [("openai", KEY, "ft:my-private-tune")]
+
+    def test_a_typed_name_comes_back_in_the_field_rather_than_vanishing(self, client):
+        _sign_up(client)
+        client.post(
+            "/connect",
+            data={"provider": "xai", "model_other": "grok-9-unreleased", "api_key": KEY},
+            follow_redirects=False,
+        )
+        assert 'value="grok-9-unreleased"' in client.get("/connect?change=1").text
+
+    def test_leaving_the_free_field_empty_uses_the_pill_that_is_selected(self, client):
+        _sign_up(client)
+        client.post(
+            "/connect",
+            data={"provider": "xai", "model_xai": "grok-4.5", "model_other": "   ", "api_key": KEY},
+            follow_redirects=False,
+        )
+        client.post("/", data={"prompt": "Assess Ravi."}, follow_redirects=False)
+        assert _Adapter.built == [("xai", KEY, "grok-4.5")]
+
+
 class TestSigningInAndOut:
     def test_the_very_first_visit_offers_to_create_an_account(self, client):
         assert "Create an account" in client.get("/signin").text
@@ -348,13 +424,13 @@ class TestSigningInAndOut:
 
     def test_signing_out_and_back_in_needs_the_key_again(self, client):
         _sign_up(client)
-        _connect(client, "openai", "gpt-5")
+        _connect(client, "openai", "gpt-6-astra")
         client.post("/signout", follow_redirects=False)
         client.post("/signin", data={"email": EMAIL, "password": PASSWORD}, follow_redirects=False)
         got = client.get("/", follow_redirects=False)
         assert got.headers["location"] == "/connect"
         # The remembered choice comes back; the credential does not.
-        assert "gpt-5" in client.get("/connect").text
+        assert "gpt-6-astra" in client.get("/connect").text
 
     def test_the_session_cookie_is_not_readable_by_scripts(self, client):
         _sign_up(client)
@@ -439,13 +515,13 @@ class TestAFailingDatabaseIsExplainedNotThrown:
 class TestTheKeyIsNeverWrittenDown:
     def test_it_is_not_in_the_database_file(self, client):
         _sign_up(client)
-        _connect(client, "openai", "gpt-5")
+        _connect(client, "openai", "gpt-6-astra")
         client.post("/", data={"prompt": "Assess Ravi Menon."})
 
         raw = client.db_path.read_bytes()
         assert KEY.encode() not in raw
         # The preference is there, so this is not passing because the file is empty.
-        assert b"gpt-5" in raw
+        assert b"gpt-6-astra" in raw
 
     def test_nor_is_the_prompt_or_anybody_named_in_it(self, client):
         _sign_up(client)
@@ -472,7 +548,7 @@ class TestTheKeyIsNeverShownBack:
     @pytest.mark.parametrize("path", ["/", "/connect?change=1", "/terms", "/privacy"])
     def test_no_page_echoes_it_while_it_is_loaded(self, client, path):
         _sign_up(client)
-        _connect(client, "openai", "gpt-5")
+        _connect(client, "openai", "gpt-6-astra")
         body = client.get(path).text
         assert KEY not in body
         # Not even a fragment long enough to be useful.

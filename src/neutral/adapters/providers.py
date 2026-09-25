@@ -37,6 +37,10 @@ class Provider:
     key: str
     label: str
     default_model: str
+    # Flagship first - it is also the default. This list is a convenience for picking,
+    # never a restriction: the connect page lets a person type any model name, because a
+    # hardcoded list of five vendors' model names is stale the week after it is written,
+    # and an enterprise on a custom deployment would never find itself on it.
     models: tuple[str, ...]
     key_hint: str
     key_url: str
@@ -46,40 +50,50 @@ PROVIDERS: dict[str, Provider] = {
     "anthropic": Provider(
         key="anthropic",
         label="Claude",
-        default_model="claude-sonnet-5",
-        models=("claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5"),
+        default_model="claude-opus-5-5",
+        models=(
+            "claude-opus-5-5",
+            "claude-fable-5-1",
+            "claude-sonnet-5",
+            "claude-haiku-4-5-20251001",
+        ),
         key_hint="starts sk-ant-",
         key_url="https://console.anthropic.com/settings/keys",
     ),
     "openai": Provider(
         key="openai",
         label="OpenAI",
-        default_model="gpt-5",
-        models=("gpt-5", "gpt-5-mini", "gpt-4.1"),
+        default_model="gpt-6-astra",
+        models=("gpt-6-astra", "gpt-6-sol", "gpt-6-luna"),
         key_hint="starts sk-",
         key_url="https://platform.openai.com/api-keys",
     ),
     "google": Provider(
         key="google",
         label="Gemini",
-        default_model="gemini-2.5-pro",
-        models=("gemini-2.5-pro", "gemini-2.5-flash"),
+        default_model="gemini-3.8-flash",
+        models=(
+            "gemini-3.8-flash",
+            "gemini-3.1-pro-preview",
+            "gemini-3.7-flash",
+            "gemini-3.5-flash-lite",
+        ),
         key_hint="from Google AI Studio",
         key_url="https://aistudio.google.com/apikey",
     ),
     "xai": Provider(
         key="xai",
         label="Grok",
-        default_model="grok-4",
-        models=("grok-4", "grok-3"),
+        default_model="grok-4.7",
+        models=("grok-4.7", "grok-4.6", "grok-4.5", "grok-4.3"),
         key_hint="starts xai-",
         key_url="https://console.x.ai",
     ),
     "deepseek": Provider(
         key="deepseek",
         label="DeepSeek",
-        default_model="deepseek-chat",
-        models=("deepseek-chat", "deepseek-reasoner"),
+        default_model="deepseek-flash",
+        models=("deepseek-flash", "deepseek-v4-pro"),
         key_hint="starts sk-",
         key_url="https://platform.deepseek.com/api_keys",
     ),

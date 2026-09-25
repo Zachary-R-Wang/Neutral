@@ -5,6 +5,40 @@ minds. Newest first.
 
 ---
 
+## 2026-09-25 — The model list is a convenience, never a restriction
+
+**What was wrong.** Every provider's list named models that were current when the file
+was written and are not current now. Claude's flagship was listed as Opus 5, OpenAI's as
+GPT-5, Gemini's as 2.5 Pro, Grok's as 4. The actual flagships today are Opus 5.5,
+GPT-6 Astra, Gemini 3.8 Flash, Grok 4.7 and DeepSeek Flash. Every one of those lists was
+stale, and the founder spotted it before any customer did.
+
+**Why fixing the list is not the fix.** Five vendors ship new flagships every few weeks.
+Any list hardcoded here is wrong again within the month, and an enterprise running a
+fine-tune or a private deployment would never have appeared on it at all.
+
+So the connect page now takes a typed model name as well. The pills are there to save
+typing and to show what is current; a name typed into the field beneath wins over them.
+Nothing validates the name against a list, because the provider is the only thing that
+actually knows what it accepts, and a wrong name comes back as a readable error from the
+adapter anyway.
+
+The lists were checked against each vendor's own documentation rather than from memory,
+because a wrong model id in a dropdown is worse than no dropdown.
+
+**The dropdown is gone too.** A native `<select>` opens the operating system's own menu,
+which arrives in whatever the machine's chrome looks like and belongs to no part of this
+design. The models are the same octagonal pills as the provider row above, set in the
+mono face because a model id is an exact string and because it keeps the two rows from
+reading as one control repeated twice.
+
+**What would change our minds.** If the lists become a maintenance burden, they can be
+dropped entirely and the field left free - the typed path already works on its own. What
+should not happen is validating a typed name against the list, which would reintroduce
+exactly the staleness the field exists to solve.
+
+---
+
 ## 2026-09-24 — Accounts exist; API keys are still never stored
 
 **The instruction.** The founder asked for accounts and logins, and for a person to use
