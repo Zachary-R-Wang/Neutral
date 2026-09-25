@@ -24,14 +24,16 @@ PROMPT = "Assess Emily Carter. She shipped the payments work."
 class _Model:
     model = "demo"
 
+    def __init__(self) -> None:
+        self.calls = 0
+
     def complete(self, prompt, *, system=None, history=None):
-        neutral = "Person A" in prompt or any("Person A" in h[1] for h in (history or []))
-        text = (
-            "Person A should tighten their estimates."
-            if neutral
-            else "Emily is doing well overall."
+        self.calls += 1
+        return Completion(
+            text="Person A should tighten their estimates.",
+            model=self.model,
+            stop_reason="end_turn",
         )
-        return Completion(text=text, model=self.model, stop_reason="end_turn")
 
 
 def rendered(prompt: str = PROMPT) -> tuple[str, Conversation]:
@@ -56,16 +58,23 @@ class TestTheThreadShowsTheAnswerTheUserCameFor:
 
 
 class TestTheOriginalIsAlwaysOneClickAway:
-    def test_the_original_answer_is_present(self):
-        """S2 - never hidden, even though it is not the answer being shown."""
+    def test_one_model_call_per_turn(self):
+        """A conversation asks once. Asking twice to fill an expander is not free."""
+        adapter = _Model()
+        conversation = Conversation()
+        ask(conversation, PROMPT, adapter)
+        assert adapter.calls == 1
+
+    def test_the_unrestored_reply_is_present(self):
+        """The same reply, before names went back - what Neutral actually did."""
         html, _ = rendered()
-        assert "Emily is doing well overall." in html
+        assert "Person A should tighten their estimates." in html
 
     def test_it_sits_inside_a_collapsed_control(self):
         html, _ = rendered()
         block = re.search(r"<details class=\"original\">(.*?)</details>", html, re.S)
-        assert block, "the original answer is not inside a collapsible control"
-        assert "Emily is doing well overall." in block.group(1)
+        assert block, "the unrestored reply is not inside a collapsible control"
+        assert "Person A" in block.group(1)
 
     def test_it_is_closed_by_default(self):
         html, _ = rendered()
@@ -292,15 +301,16 @@ class TestNothingChangedMeansOneAnswer:
         assert turn.untouched
         assert "nothing in this needed changing" in turn.note.lower()
 
-    def test_no_original_toggle_is_offered_when_they_would_be_identical(self):
+    def test_no_toggle_is_offered_when_there_is_nothing_to_show(self):
         conversation = Conversation()
         ask(conversation, "How should I structure a review?", self._Counting())
-        assert "Original response" not in page(conversation)
+        assert "Before names were put back" not in page(conversation)
 
-    def test_a_prompt_with_a_name_still_makes_two_calls(self):
+    def test_a_prompt_with_a_name_also_makes_one_call(self):
+        """Every turn costs one call. The expander shows the same reply, unrestored."""
         adapter = self._Counting()
         conversation = Conversation()
         turn = ask(conversation, "Assess Emily Carter for promotion.", adapter)
-        assert adapter.calls == 2
+        assert adapter.calls == 1
         assert turn.changes
-        assert "Original response" in page(conversation)
+        assert "Before names were put back" in page(conversation)

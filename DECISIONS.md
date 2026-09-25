@@ -5,6 +5,38 @@ minds. Newest first.
 
 ---
 
+## 2026-09-24 — A conversation costs one model call, not two
+
+**What was wrong.** Every message made two calls: the prompt as written, and the rewritten
+prompt. The interface showed the first behind a control labelled "Original response". That
+doubled the cost of every message, and it looked like invention - two visibly different
+answers with nothing to explain the difference, because they were replies to two different
+questions rather than one reply shown two ways.
+
+**Why it was built that way, and why that is not a defence.** S2 says: *"Every request
+stores both the unmodified model response (what the model would have said to the raw
+prompt) and the Neutral-processed response."* Read literally that requires asking twice.
+The founder's interface spec described the control as revealing the model's own reply
+before polishing - one call. The two did not agree, and rather than raising it, the
+document was followed silently and the cost went up. Surfacing that conflict was the whole
+job at that moment.
+
+**What it does now.** The conversation makes one call, with the rewritten prompt. The
+control under an answer reveals that same reply with the placeholders still in it - what
+the model actually wrote, before names were put back. That is a truer answer to "what did
+Neutral do to this" than a second reply to a different question, and it costs nothing.
+
+**Where S2 still holds.** The evaluation harness continues to send both, because comparing
+them IS the measurement - that is what a divergence score is. The invariant tests are
+unchanged and still run against neutral/pipeline.py, which still does both.
+
+**What this amounts to.** S2's transparency requirement is met in the product by showing
+the model's unrestored reply rather than a second answer. If the founder wants the
+literal reading back - the answer to the raw prompt, always, in the interface - it is one
+flag and double the cost per message, and it should be their decision rather than mine.
+
+---
+
 ## 2026-09-24 — Name detection runs locally, not through a model
 
 **The question that prompted it.** "Why does it need credits? The rewriting is basic text

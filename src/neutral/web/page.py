@@ -68,8 +68,8 @@ CSS = """
   --amber:hsl(38 92% 45%);
   /* The corner cut. One value so every octagon agrees. */
   --cut:10px;
-  --glow-1:hsl(272 78% 58% / .20);
-  --glow-2:hsl(272 78% 58% / .10);
+  --glow-1:hsl(272 70% 58% / .10);
+  --glow-2:hsl(272 70% 58% / .05);
   color-scheme:light;
 }
 @media(prefers-color-scheme:dark){:root:not([data-theme=light]){
@@ -78,14 +78,17 @@ CSS = """
   --line:hsl(150 6% 17%); --line-2:hsl(150 6% 22%);
   --solid:hsl(0 0% 93%); --on-solid:hsl(0 0% 4%);
   --amber:hsl(38 92% 58%);
-  --glow-1:hsl(272 85% 66% / .26);
-  --glow-2:hsl(272 85% 66% / .13);
+  --glow-1:hsl(272 80% 66% / .13);
+  --glow-2:hsl(272 80% 66% / .07);
   color-scheme:dark;
 }}
 @media(prefers-color-scheme:dark){:root:not([data-theme=light]) body{
-  background:
-    radial-gradient(1100px 520px at 50% -12%, hsl(152 30% 9%), transparent 62%),
-    linear-gradient(180deg, hsl(150 14% 4%), hsl(150 12% 2%));
+  background:linear-gradient(
+    180deg,
+    hsl(150 22% 9%) 0%,
+    hsl(153 20% 6.5%) 34%,
+    hsl(157 21% 4%) 70%,
+    hsl(162 24% 2.5%) 100%);
 }}
 *{box-sizing:border-box}
 html,body{height:100%}
@@ -93,9 +96,12 @@ body{
   margin:0;color:var(--fg);
   /* A green plane rather than a flat off-white: one soft wash from the top, over a
      gradient that barely moves. Fixed, so it does not slide as the thread scrolls. */
-  background:
-    radial-gradient(1100px 520px at 50% -12%, hsl(152 42% 90%), transparent 62%),
-    linear-gradient(180deg, hsl(150 26% 97%), hsl(150 16% 94%));
+  background:linear-gradient(
+    180deg,
+    hsl(147 40% 96.5%) 0%,
+    hsl(150 30% 94%) 32%,
+    hsl(155 24% 90%) 68%,
+    hsl(160 21% 86%) 100%);
   background-attachment:fixed;
   font-family:"Geist","Geist Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,
     "Helvetica Neue",Arial,sans-serif;
@@ -120,8 +126,8 @@ body{
 .edge{background:var(--line);padding:1px}
 .glow{filter:drop-shadow(0 0 4px var(--glow-1)) drop-shadow(0 0 16px var(--glow-2));
   transition:filter .18s}
-.glow:focus-within{filter:drop-shadow(0 0 9px var(--glow-1))
-  drop-shadow(0 0 28px var(--glow-2))}
+.glow:focus-within{filter:drop-shadow(0 0 5px var(--glow-1))
+  drop-shadow(0 0 20px var(--glow-2))}
 
 /* header -------------------------------------------------------------------- */
 .top{display:flex;align-items:center;gap:12px;padding-bottom:16px}
@@ -190,11 +196,11 @@ details.original>summary:hover,details.original[open]>summary{color:var(--fg-2);
 
 /* composer ------------------------------------------------------------------ */
 form.composer{position:sticky;bottom:0;padding:12px 0 0}
-form.composer::before{content:"";position:absolute;inset:-26px 0 auto 0;height:26px;
-  background:linear-gradient(to bottom, transparent, hsl(150 16% 94% / .92));
+form.composer.sticky::before{content:"";position:absolute;inset:-26px 0 auto 0;height:26px;
+  background:linear-gradient(to bottom, transparent, hsl(160 21% 86% / .9));
   pointer-events:none}
-@media(prefers-color-scheme:dark){:root:not([data-theme=light]) form.composer::before{
-  background:linear-gradient(to bottom, transparent, hsl(150 12% 2% / .92))}}
+@media(prefers-color-scheme:dark){:root:not([data-theme=light]) form.composer.sticky::before{
+  background:linear-gradient(to bottom, transparent, hsl(162 24% 2.5% / .9))}}
 .box{display:flex;gap:8px;align-items:flex-end;background:var(--panel);
   padding:9px 9px 9px 15px}
 textarea{flex:1;border:0;background:transparent;color:var(--fg);font:inherit;
@@ -344,14 +350,15 @@ def _turn(turn: Turn) -> str:
             f"was sent</div>{_changes(turn)}</div></details>"
         )
 
-    # S2 - the unmodified answer is always reachable, in place, never in a modal.
-    if turn.original_answer and not turn.untouched:
+    # The same reply, before names were put back. No second call; this is what the model
+    # actually wrote, which is the honest thing to show under "what did Neutral do".
+    if turn.neutral_answer and not turn.untouched:
         reply.append(
             '<details class="original">'
-            "<summary>Original response</summary>"
-            '<div class="oct raw"><div class="label">What the model said to your prompt '
-            "as written</div>"
-            f'<div class="prose small">{markdown(turn.original_answer)}</div>'
+            "<summary>Before names were put back</summary>"
+            '<div class="oct raw"><div class="label">What the model wrote, with the '
+            "identity still removed</div>"
+            f'<div class="prose small">{markdown(turn.neutral_answer)}</div>'
             f"{_changes(turn)}</div></details>"
         )
     reply.append("</div>")
@@ -387,7 +394,7 @@ COMPOSER_JS = """
 
 def _composer(*, opening: bool) -> str:
     label = "Start" if opening else "Send"
-    return f"""<form class="composer" method="post" action="/">
+    return f"""<form class="composer{"" if opening else " sticky"}" method="post" action="/">
   <div class="glow"><div class="oct edge"><div class="oct box">
     <textarea name="prompt" rows="1" autofocus
       placeholder="{escape(PLACEHOLDER) if opening else "Reply..."}"></textarea>

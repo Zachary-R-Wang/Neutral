@@ -15,9 +15,15 @@ appearance, so the same document always yields the same mapping. It is created, 
 gone before the request returns, exactly as S5 requires, and it costs about six
 milliseconds because detection runs locally.
 
-Two conversations are kept in step, not one: what the model was asked without Neutral, and
-what it was asked with it. That is what makes the comparison in the interface honest - both
-answers come from the same conversation at the same point, not from different histories.
+**One model call per turn.** The control under an answer reveals the same reply with the
+placeholders still in it - what the model actually wrote, before names were put back. That
+shows exactly what Neutral did and costs nothing extra.
+
+CLAUDE.md S2 asks for something different: the answer the model would have given to the
+raw prompt, which means asking twice. The evaluation harness needs that, because comparing
+the two is the entire measurement. A person having a conversation does not, and charging
+them double for a comparison they did not ask for is not transparency. The eval path in
+neutral/pipeline.py still sends both; this one does not. See DECISIONS.md, 2026-09-24.
 """
 
 from __future__ import annotations
@@ -40,16 +46,21 @@ SEPARATOR = "\n\n@@@@\n\n"
 
 @dataclass
 class Turn:
-    """One exchange. Both answers are kept; the interface shows one and offers the other."""
+    """One exchange, from one model call.
+
+    The interface shows `answer` and offers `neutral_answer` behind a control. They are
+    the same reply: one before names were put back, one after. Nothing is asked twice.
+    """
 
     asked: str
-    # What the user reads: the answer to the rewritten prompt, with names put back.
+    # What the user reads: the model's reply with names and pronouns restored.
     answer: str = ""
-    # What the model said to the prompt exactly as written. S2 - always retrievable.
-    original_answer: str = ""
-    # The answer in placeholder form. Not shown; it is what the model is given as history,
-    # so its own context stays in the terms it was answering in.
+    # The same reply as the model wrote it, with placeholders still in place. This is what
+    # the control below an answer reveals - it shows what Neutral did, at no extra cost.
     neutral_answer: str = ""
+    # Only set when the prompt went to the model untouched, in which case it is the same
+    # text as `answer` and there is nothing to compare.
+    original_answer: str = ""
     changes: tuple[TransformRecord, ...] = ()
     untouched: bool = False
     note: str = ""
@@ -108,85 +119,75 @@ def ask(conversation: Conversation, prompt: str, adapter) -> Turn:
     turn = Turn(asked=prompt)
     prompts = [t.asked for t in conversation.turns] + [prompt]
 
-    original_history: list[tuple[str, str]] = []
-    for past in conversation.turns:
-        original_history.append(("user", past.asked))
-        original_history.append(("assistant", past.original_answer or past.answer))
-
-    # S2 first: whatever else fails, the unmodified answer exists.
-    unmodified = adapter.complete(prompt, history=original_history)
-    if unmodified.error:
-        turn.failed = True
-        turn.note = errors.user_message(unmodified.error_kind or errors.BAD_REQUEST)
-        # No answer to show, but the rewriting is local and costs nothing, so show what
-        # would have been removed rather than an empty turn.
-        try:
-            _, _, _, turn.changes = _rewrite_all(prompts)
-        except Exception:  # noqa: BLE001
-            pass
+    def send_unchanged(note: str, *, refused: bool = False) -> Turn:
+        """Send the prompt as written. Used when there is nothing safe or useful to change."""
+        history = [
+            part
+            for past in conversation.turns
+            for part in (("user", past.asked), ("assistant", past.answer))
+        ]
+        reply = adapter.complete(prompt, history=history)
+        if reply.error:
+            turn.failed = True
+            turn.note = errors.user_message(reply.error_kind or errors.BAD_REQUEST)
+        else:
+            turn.answer = reply.text
+            turn.original_answer = reply.text
+            turn.untouched = True
+            turn.note = (
+                "The model declined this request. Its refusal is shown exactly as given; "
+                "it was not rewritten, retried or resent."
+                if reply.refused
+                else note
+            )
         conversation.turns.append(turn)
         return turn
 
-    turn.original_answer = unmodified.text
-
-    if unmodified.refused:
-        turn.answer = unmodified.text
-        turn.untouched = True
-        turn.note = (
-            "The model declined this request. Its refusal is shown exactly as given; "
-            "the prompt was not rewritten, retried or resent."
-        )
-        conversation.turns.append(turn)
-        return turn
-
+    # S3: identity that is load-bearing for safety is never stripped.
     hold = safety_hold(prompt)
     if hold.held:
-        turn.answer = unmodified.text
-        turn.untouched = True
-        turn.note = hold.reason
-        conversation.turns.append(turn)
-        return turn
+        return send_unchanged(hold.reason)
 
     try:
         rewritten, identity_map, pronoun_style, changes = _rewrite_all(prompts)
     except (InvariantViolation, Exception):  # noqa: BLE001 - fail open to the original
-        turn.answer = unmodified.text
-        turn.untouched = True
-        turn.note = (
-            "The rewritten prompt could not be proved faithful to what you wrote, so your "
-            "prompt was sent unchanged."
+        return send_unchanged(
+            "The rewritten prompt could not be proved faithful to what you wrote, so it "
+            "was sent unchanged."
         )
-        conversation.turns.append(turn)
-        return turn
 
     # Nothing was found to change, so the rewritten prompt IS the prompt. Asking the
     # model the same question a second time would cost another call and return a
     # different answer - models do not repeat themselves - and the interface would show
     # two answers side by side as though Neutral had done something. It did not.
     if rewritten[-1] == prompt and not changes:
-        turn.answer = unmodified.text
-        turn.untouched = True
-        turn.note = (
-            "Nothing in this needed changing, so it went to the model exactly as you "
-            "wrote it. There is only one answer because there was only one prompt."
+        return send_unchanged(
+            "Nothing in this needed changing, so it went to the model exactly as you wrote it."
         )
+
+    history = [
+        part
+        for past, past_rewritten in zip(conversation.turns, rewritten[:-1], strict=False)
+        for part in (
+            ("user", past_rewritten),
+            ("assistant", past.neutral_answer or past.answer),
+        )
+    ]
+
+    processed = adapter.complete(rewritten[-1], history=history)
+    if processed.error:
+        turn.failed = True
+        turn.note = errors.user_message(processed.error_kind or errors.BAD_REQUEST)
+        turn.changes = changes
         conversation.turns.append(turn)
         return turn
 
-    neutral_history: list[tuple[str, str]] = []
-    for past, past_rewritten in zip(conversation.turns, rewritten[:-1], strict=False):
-        neutral_history.append(("user", past_rewritten))
-        neutral_history.append(("assistant", past.neutral_answer or past.answer))
-
-    processed = adapter.complete(rewritten[-1], history=neutral_history)
-    if processed.error or processed.refused:
-        turn.answer = unmodified.text
+    if processed.refused:
+        turn.answer = processed.text
         turn.untouched = True
         turn.note = (
-            "The model declined the rewritten request, so the answer to your prompt as "
-            "written is shown instead."
-            if processed.refused
-            else errors.user_message(processed.error_kind or errors.BAD_REQUEST)
+            "The model declined this request. Its refusal is shown exactly as given; "
+            "it was not retried or resent."
         )
         conversation.turns.append(turn)
         return turn
