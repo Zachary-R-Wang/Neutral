@@ -294,8 +294,8 @@ author's. Subject to every constraint in §3.
 ## 8. Out of scope for the MVP
 
 Do not build: billing, multi-tenancy, an admin dashboard, a browser extension, an API
-key management system, rate limiting, a marketing site, or a deployment pipeline. If a
-task seems to require one, it does not — say so and move on.
+key management system, rate limiting, or a marketing site. If a task seems to require
+one, it does not — say so and move on.
 
 **Amended 2026-09-24, on the founder's written instruction**, which was to build accounts
 and logins and let a person use their own API key against more than one model, "so that
@@ -310,6 +310,24 @@ The rest of the list means what it said. In particular **an API key management s
 still forbidden** — storing, encrypting, rotating or syncing anyone's credentials — and
 the absence of a column for one is what enforces it. Multi-tenancy is still forbidden:
 there are no organisations, no roles and no sharing, only one person per account.
+
+**Amended 2026-09-25, on the founder's written instruction.** "A deployment pipeline"
+is removed from the list. Neutral is a program that has to be running to answer anything,
+so there is no way to put it on a domain without one, and the founder has bought
+neutralai.app.
+
+What this permits is hosting Neutral somewhere it can be reached, and whatever
+configuration that host needs. It does not permit the rest of the list, and it does not
+by itself make Neutral fit for anyone's real employment decision — the S6 banner stays
+up, and the things `LIMITATIONS.md` lists as missing are still missing once it is public.
+
+Two of those become sharper the moment there is a public link, and they are named here so
+that going live is not mistaken for being finished:
+
+- **There is no password reset.** A person who forgets their password cannot get back in
+  and cannot be helped, because there is no verified address to send a reset to.
+- **There is no rate limiting**, which stays forbidden above. Nothing stops a script
+  hammering the sign-in form.
 
 Anything beyond that list is a new instruction, not an extension of this one.
 
