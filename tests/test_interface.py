@@ -16,6 +16,7 @@ from html import escape
 from neutral.adapters.base import Completion
 from neutral.conversation import Conversation, ask
 from neutral.core import Span, TransformRecord
+from neutral.web.legal import PRIVACY
 from neutral.web.page import page
 
 PROMPT = "Assess Emily Carter. She shipped the payments work."
@@ -262,12 +263,49 @@ class TestTheLegalPages:
         assert span and "nothing else follows" not in span.group(1)
 
     def test_the_third_party_disclosure_is_present(self):
-        """The most important thing on either page: prompts leave this machine."""
-        from neutral.web.legal import PRIVACY
+        """The most important thing on either page: prompts leave this machine.
 
+        This test used to require the page to say "nothing is stored here", which was
+        true when it was written and false the moment accounts arrived - so the test was
+        holding a false claim in place rather than catching it. It now checks the two
+        things that are actually load-bearing: that prompts go to someone else, and that
+        they are not kept here.
+        """
         lowered = PRIVACY.lower()
         assert "third-party model provider" in lowered
-        assert "not stored here" in lowered or "nothing is stored here" in lowered
+        assert "prompts and answers" in lowered
+        assert "not saved to any file or database" in lowered
+
+    def test_the_privacy_page_does_not_claim_nothing_is_stored(self):
+        """It said exactly that until accounts were added, which made it false.
+
+        A privacy policy that misdescribes the product is worse than not having one, and
+        this is the failure mode: the page was written when Neutral had no database, and
+        nothing made it wrong again when one arrived.
+        """
+        for false_claim in (
+            "Nothing is stored here",
+            "No account, no login",
+            "Nothing is written to disk",
+            "no record to access",
+        ):
+            assert false_claim not in PRIVACY, f"the privacy page still says: {false_claim}"
+
+    def test_the_privacy_page_describes_the_account_that_is_stored(self):
+        for fact in ("email address", "password", "written to disk"):
+            assert fact in PRIVACY, f"the privacy page does not mention {fact}"
+
+    def test_the_privacy_page_says_the_api_key_is_never_written_down(self):
+        assert "API key is never written down" in PRIVACY
+
+    def test_it_says_the_prompt_is_sent_once_not_twice(self):
+        """The conversation makes one model call. The page used to promise two."""
+        assert "sent twice" not in PRIVACY
+        assert "It is sent once" in PRIVACY
+
+    def test_it_admits_the_cases_where_the_real_names_do_go_out(self):
+        """Rewritten is the usual path, not the only one. Saying otherwise overclaims."""
+        assert "exactly as you wrote it" in PRIVACY
 
     def test_the_main_page_links_to_both(self):
         html = page()
