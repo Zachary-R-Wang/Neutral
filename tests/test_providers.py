@@ -173,6 +173,41 @@ class TestFailuresSpeakTheNeutralVocabulary:
         capture["reply"] = _Response(400, "Insufficient Balance")
         assert build("deepseek", "k").complete(PROMPT).error_kind == errors.NO_CREDIT
 
+    @pytest.mark.parametrize(
+        ("status", "body"),
+        [
+            # Gemini answers a bad key with 400, not 401. Reading the status alone told
+            # somebody whose key was wrong that the model had rejected their request,
+            # which sent them to look at their prompt.
+            (
+                400,
+                '{"error":{"code":400,"message":"API key not valid. Please pass a valid API key.","status":"INVALID_ARGUMENT"}}',
+            ),
+            # Grok does the same, with different wording.
+            (400, '{"code":"invalid-argument","error":"Incorrect API key provided."}'),
+            (400, '{"error":{"message":"Authentication Fails, your api key is invalid"}}'),
+            (400, "invalid_api_key"),
+            (400, "Missing API key in request"),
+            (401, "unauthorized"),
+        ],
+    )
+    def test_a_bad_key_reads_as_a_bad_key_whatever_status_it_arrives_with(
+        self, capture, status, body
+    ):
+        capture["reply"] = _Response(status, body)
+        reply = build("google", "k").complete(PROMPT)
+        assert reply.error_kind == errors.AUTH, (
+            f"a {status} saying {body[:40]!r} was classified as {reply.error_kind}, so "
+            f"the person would be told their request was rejected, not their key"
+        )
+
+    def test_an_ordinary_bad_request_is_still_a_bad_request(self):
+        """The fix must not turn every 400 into an authentication problem."""
+        from neutral.adapters.providers import _classify
+
+        assert _classify(400, "unsupported parameter: top_k") == errors.BAD_REQUEST
+        assert _classify(400, "messages must not be empty") == errors.BAD_REQUEST
+
     @pytest.mark.parametrize("provider", ["openai", "google", "xai", "deepseek"])
     def test_a_network_failure_is_returned_not_raised(self, provider, monkeypatch):
         def boom(*a, **k):

@@ -169,6 +169,28 @@ def _classify(status: int, body: str) -> str:
     lowered = body.lower()
     if status in (401, 403):
         return errors.AUTH
+
+    # Status alone is not enough. Gemini and Grok answer a bad API key with 400, not 401,
+    # so reading only the code reported "the model rejected the request" to somebody whose
+    # key was simply wrong - sending them to look at their prompt instead of their
+    # credentials. Every provider says so in words even when the number disagrees.
+    if any(
+        phrase in lowered
+        for phrase in (
+            "api key not valid",
+            "invalid api key",
+            "incorrect api key",
+            "api key is invalid",
+            "invalid_api_key",
+            "invalid authentication",
+            "authentication fails",
+            "unauthorized",
+            "no auth credentials",
+            "missing api key",
+        )
+    ):
+        return errors.AUTH
+
     if status == 429:
         return errors.RATE_LIMITED
     if status >= 500:
