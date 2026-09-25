@@ -193,3 +193,43 @@ class TestFailuresSpeakTheNeutralVocabulary:
 def test_an_unknown_provider_is_refused_rather_than_guessed_at():
     with pytest.raises(ValueError, match="unknown provider"):
         build("definitely-not-a-provider", "k")
+
+
+class TestEveryOfferedModelGetsARequestItAccepts:
+    """A model on the picker that the adapter cannot call is a broken product.
+
+    Sending output_config.effort to a model that does not take it comes back as a 400,
+    which the interface rendered as "The connected model rejected the request" - true,
+    unhelpful, and it hit anyone who chose Haiku.
+    """
+
+    def test_effort_is_only_sent_to_models_that_take_it(self):
+        from neutral.adapters.anthropic_api import AnthropicAdapter, supports_adaptive_thinking
+        from neutral.adapters.providers import PROVIDERS
+
+        for model in PROVIDERS["anthropic"].models:
+            kwargs = AnthropicAdapter(api_key="x", model=model)._request_kwargs()
+            if supports_adaptive_thinking(model):
+                assert kwargs["output_config"]["effort"], model
+            else:
+                assert "output_config" not in kwargs, (
+                    f"{model} does not accept effort, but the request would send it"
+                )
+
+    def test_no_request_carries_thinking_without_support(self):
+        from neutral.adapters.anthropic_api import AnthropicAdapter, supports_adaptive_thinking
+        from neutral.adapters.providers import PROVIDERS
+
+        for model in PROVIDERS["anthropic"].models:
+            kwargs = AnthropicAdapter(api_key="x", model=model)._request_kwargs()
+            if not supports_adaptive_thinking(model):
+                assert "thinking" not in kwargs, model
+
+    def test_the_model_and_token_limit_are_always_present(self):
+        from neutral.adapters.anthropic_api import AnthropicAdapter
+        from neutral.adapters.providers import PROVIDERS
+
+        for model in PROVIDERS["anthropic"].models:
+            kwargs = AnthropicAdapter(api_key="x", model=model, max_tokens=123)._request_kwargs()
+            assert kwargs["model"] == model
+            assert kwargs["max_tokens"] == 123

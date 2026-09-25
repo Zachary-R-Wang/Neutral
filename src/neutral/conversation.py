@@ -121,6 +121,7 @@ def ask(conversation: Conversation, prompt: str, adapter) -> Turn:
         reply = adapter.complete(prompt, history=history)
         if reply.error:
             turn.failed = True
+            print(f"[model] {reply.error_kind or 'error'}: {reply.error}")
             turn.note = errors.user_message(reply.error_kind or errors.BAD_REQUEST)
         else:
             turn.answer = reply.text
@@ -169,6 +170,9 @@ def ask(conversation: Conversation, prompt: str, adapter) -> Turn:
     processed = adapter.complete(rewritten[-1], history=history)
     if processed.error:
         turn.failed = True
+        # To the terminal, never to the page: the interface stays provider-neutral, and
+        # the actual reason stops being invisible to whoever has to fix it.
+        print(f"[model] {processed.error_kind or 'error'}: {processed.error}")
         turn.note = errors.user_message(processed.error_kind or errors.BAD_REQUEST)
         turn.changes = changes
         conversation.turns.append(turn)

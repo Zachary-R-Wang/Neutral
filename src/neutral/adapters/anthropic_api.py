@@ -140,13 +140,18 @@ class AnthropicAdapter:
         )
 
     def _request_kwargs(self) -> dict:
-        kwargs: dict = {
-            "model": self.model,
-            "max_tokens": self.max_tokens,
-            "output_config": {"effort": self.effort},
-        }
-        if self.thinking and supports_adaptive_thinking(self.model):
-            kwargs["thinking"] = {"type": "adaptive"}
+        """The request body, with nothing in it this model cannot accept.
+
+        effort used to be sent to every model. The ones that do not take it answer with
+        "This model does not support the effort parameter", a 400, which the interface
+        showed as the unhelpful "The connected model rejected the request" - and it hit
+        anyone who picked Haiku from the model list.
+        """
+        kwargs: dict = {"model": self.model, "max_tokens": self.max_tokens}
+        if supports_adaptive_thinking(self.model):
+            kwargs["output_config"] = {"effort": self.effort}
+            if self.thinking:
+                kwargs["thinking"] = {"type": "adaptive"}
         return kwargs
 
     def complete(
