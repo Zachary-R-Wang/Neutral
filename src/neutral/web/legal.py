@@ -25,7 +25,7 @@ from __future__ import annotations
 # for evaluation and not for deciding anything about a real employee.
 OPERATOR = "Zachary R. Wang"
 CONTACT = "zachary.wang1@sisyphus.website"
-JURISDICTION = "[[the country whose law governs this, e.g. England and Wales]]"
+JURISDICTION = "the State of California, in the United States"
 
 TERMS = f"""
 ## What this is
@@ -86,7 +86,8 @@ These terms may change. Continuing to use the tool means accepting the current v
 
 ## Governing law
 
-{JURISDICTION}.
+These terms are governed by the law of {JURISDICTION}, and any dispute arising from them
+belongs to the courts there.
 
 ## Contact
 

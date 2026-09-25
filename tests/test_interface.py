@@ -16,7 +16,7 @@ from html import escape
 from neutral.adapters.base import Completion
 from neutral.conversation import Conversation, ask
 from neutral.core import Span, TransformRecord
-from neutral.web.legal import PRIVACY
+from neutral.web.legal import CONTACT, JURISDICTION, OPERATOR, PRIVACY, TERMS
 from neutral.web.page import page
 
 PROMPT = "Assess Emily Carter. She shipped the payments work."
@@ -237,13 +237,17 @@ class TestTheLegalPages:
             assert "evaluation use only" in html
 
     def test_unfilled_placeholders_are_flagged_loudly(self):
-        """A terms page that quietly ships saying FILL_IN is worse than none at all."""
-        from neutral.web.legal import TERMS
+        """A terms page that quietly ships saying FILL_IN is worse than none at all.
+
+        Written against a made-up page rather than the real one. It used to use the real
+        TERMS, which only worked while that page was unfinished - filling it in broke a
+        test that was supposed to be about the highlighting.
+        """
         from neutral.web.page import legal_page
 
-        html = legal_page("Terms of use", TERMS)
+        html = legal_page("Terms of use", "## Who\n\nOperated by [[your name]] under [[some law]].")
         assert "This page is not finished" in html
-        assert 'class="fillin"' in html
+        assert html.count('class="fillin"') == 2
 
     def test_a_filled_page_shows_no_warning(self):
         from neutral.web.page import legal_page
@@ -275,6 +279,21 @@ class TestTheLegalPages:
         assert "third-party model provider" in lowered
         assert "prompts and answers" in lowered
         assert "not saved to any file or database" in lowered
+
+    def test_the_real_pages_have_no_placeholders_left(self):
+        """The highlighting machinery is tested separately with a made-up page.
+
+        This one checks the actual pages that would go out. Now that Neutral is meant to
+        be reachable on a domain, an unfilled placeholder is a build failure rather than
+        a note to self.
+        """
+        for name, body in (("terms", TERMS), ("privacy", PRIVACY)):
+            assert "[[" not in body, f"the {name} page still has a placeholder in it"
+
+    def test_the_pages_name_who_operates_it_and_how_to_reach_them(self):
+        assert OPERATOR in TERMS
+        assert CONTACT in TERMS and CONTACT in PRIVACY
+        assert JURISDICTION in TERMS
 
     def test_the_privacy_page_does_not_claim_nothing_is_stored(self):
         """It said exactly that until accounts were added, which made it false.
