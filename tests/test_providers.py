@@ -202,6 +202,30 @@ class TestFailuresSpeakTheNeutralVocabulary:
             f"the person would be told their request was rejected, not their key"
         )
 
+    @pytest.mark.parametrize(
+        ("status", "body"),
+        [
+            (404, "The model gpt-7 does not exist or you do not have access to it."),
+            (404, "models/gemini-9 is not found for API version v1beta"),
+            (404, "Model not found: grok-99"),
+            (400, '{"error":{"message":"Model Not Exist","type":"invalid_request_error"}}'),
+            (400, "Invalid model: deepseek-flsh"),
+        ],
+    )
+    @pytest.mark.parametrize("provider", ["openai", "google", "xai", "deepseek"])
+    def test_an_unknown_model_name_says_so(self, capture, provider, status, body):
+        """The model field takes anything typed into it, so a typo is the likely mistake.
+
+        "The model rejected the request" tells somebody nothing about which part to fix.
+        """
+        capture["reply"] = _Response(status, body)
+        assert build(provider, "k").complete(PROMPT).error_kind == errors.MODEL_NOT_FOUND
+
+    def test_the_message_for_it_points_at_the_model_field(self):
+        message = errors.user_message(errors.MODEL_NOT_FOUND)
+        assert "model name" in message
+        assert "claude" not in message.lower() and "openai" not in message.lower()
+
     def test_an_ordinary_bad_request_is_still_a_bad_request(self):
         """The fix must not turn every 400 into an authentication problem."""
         from neutral.adapters.providers import _classify

@@ -195,6 +195,10 @@ def _classify(status: int, body: str) -> str:
         return errors.RATE_LIMITED
     if status >= 500:
         return errors.SERVER_ERROR
+    # A wrong model name is the likeliest mistake now that the model field takes
+    # anything typed into it, and "the model rejected the request" is no help with it.
+    if errors.is_model_missing(status, body):
+        return errors.MODEL_NOT_FOUND
     if status == 402:
         return errors.NO_CREDIT
     if any(

@@ -72,6 +72,8 @@ def _classify(exc) -> str:
         return errors.AUTH
     if status >= 500:
         return errors.SERVER_ERROR
+    if errors.is_model_missing(status, raw):
+        return errors.MODEL_NOT_FOUND
     return errors.BAD_REQUEST
 
 
@@ -184,7 +186,7 @@ class AnthropicAdapter:
             return Completion(
                 text="",
                 model=self.model,
-                error_kind=errors.BAD_REQUEST,
+                error_kind=errors.MODEL_NOT_FOUND,
                 error=(
                     f"The model {self.model!r} does not exist or is not available to "
                     f"your account. Check NEUTRAL_SUBJECT_MODEL and NEUTRAL_JUDGE_MODEL "

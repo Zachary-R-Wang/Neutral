@@ -22,6 +22,7 @@ UNREACHABLE = "unreachable"
 SERVER_ERROR = "server_error"
 BAD_REQUEST = "bad_request"
 NO_KEY = "no_key"
+MODEL_NOT_FOUND = "model_not_found"
 
 _MESSAGES = {
     NO_CREDIT: (
@@ -43,6 +44,10 @@ _MESSAGES = {
         "again shortly."
     ),
     BAD_REQUEST: "The connected model rejected the request.",
+    MODEL_NOT_FOUND: (
+        "Your model provider does not recognise that model name, or this account cannot "
+        "use it. Check the spelling in the model field, or choose one from the list."
+    ),
     NO_KEY: (
         "No model is connected yet. Add an API key for the model you want Neutral to send "
         "prompts to, then restart."
@@ -53,3 +58,27 @@ _MESSAGES = {
 def user_message(kind: str) -> str:
     """What to show a person. Never names a provider."""
     return _MESSAGES.get(kind, "The connected model could not answer this request.")
+
+
+# How providers say "no such model". Status alone is not enough for this either: some use
+# 404, some use 400 with the reason in words.
+_MODEL_MISSING = (
+    # "not exist" rather than "does not exist": DeepSeek says "Model Not Exist".
+    "not exist",
+    "not found",
+    "model_not_found",
+    "unknown model",
+    "invalid model",
+    "no such model",
+    "is not available to your account",
+    "do not have access to the model",
+    "not supported for generatecontent",
+)
+
+
+def is_model_missing(status: int, body: str) -> bool:
+    """True when a failure means the model name, not the request, was the problem."""
+    lowered = (body or "").lower()
+    if any(phrase in lowered for phrase in _MODEL_MISSING):
+        return "model" in lowered or status == 404
+    return False
