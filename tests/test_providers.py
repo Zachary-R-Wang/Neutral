@@ -181,7 +181,8 @@ class TestFailuresSpeakTheNeutralVocabulary:
             # which sent them to look at their prompt.
             (
                 400,
-                '{"error":{"code":400,"message":"API key not valid. Please pass a valid API key.","status":"INVALID_ARGUMENT"}}',
+                '{"error":{"code":400,"message":"API key not valid. Please pass a '
+                'valid API key.","status":"INVALID_ARGUMENT"}}',
             ),
             # Grok does the same, with different wording.
             (400, '{"code":"invalid-argument","error":"Incorrect API key provided."}'),
