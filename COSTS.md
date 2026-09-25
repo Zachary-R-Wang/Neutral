@@ -1,10 +1,47 @@
 # What the testing phase costs
 
 Every figure is an estimate from measured token usage on the runs done so far. Costs are
-Anthropic API credit, which is separate from any Claude subscription.
+API credit, which is separate from any subscription.
 
 Assumptions: 60 matched pairs, 5 runs per variant, Sonnet 5 as the model being measured,
 Opus 5 as the judge. Dated 2026-09-20; prices change.
+
+---
+
+## Measuring more than one model
+
+*Added 2026-09-24, when the adapters for OpenAI, Gemini and Grok were built. Prices
+checked on that date.*
+
+Every run has two halves and only one of them changes when you swap the model being
+measured. The judge is the same instrument scoring the same number of answers either way,
+so the judge half is a flat **$8.10** per run at Opus 5 prices, or **$1.62** at Haiku 4.5.
+That is why four very differently priced models come out within a few dollars of each
+other.
+
+| Model being measured | $/M in | $/M out | The problem (one arm) | Problem + solution |
+|---|---:|---:|---:|---:|
+| Claude Sonnet 5 | 2.00 | 10.00 | $16.62 | **$33.23** |
+| OpenAI GPT-5 | 1.25 | 10.00 | $16.57 | **$33.14** |
+| Gemini 2.5 Pro | 1.25 | 10.00 | $16.57 | **$33.14** |
+| Grok 4.6 | 2.00 | 6.00 | $13.26 | **$26.51** |
+| Claude Opus 5 | 5.00 | 25.00 | $29.39 | $58.78 |
+| **Four models, one each** | | | $63.02 | **$126.03** |
+
+With Haiku 4.5 judging instead of Opus 5, the four-model total falls from $126 to **$74**.
+
+**The judge stays fixed across every model.** It is the ruler, and changing the ruler
+between measurements means the numbers cannot be compared. Blinding already removes the
+obvious objection — the judge never sees which model wrote an answer, and never sees the
+identity slot — but a sceptic can still ask whether a Claude judge favours Claude. The
+answer to that is a **$16 robustness check**: re-score the Claude rows with a non-Claude
+judge and show the two agree. Do that once, not every run.
+
+**This is not yet runnable.** `eval/cli.py` builds Anthropic adapters directly rather than
+going through `adapters/providers.py`, and `estimate_cost` only knows Anthropic prices.
+The web app is multi-provider; the harness is not. Wiring it across is small — the adapter
+interface already exists and every provider satisfies it — but it is work that has not
+been done, and it needs a funded key for each provider.
 
 ---
 
