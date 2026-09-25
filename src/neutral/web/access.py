@@ -107,6 +107,23 @@ def _field(
 </div>"""
 
 
+def trouble_page(message: str, *, back: str = "/") -> str:
+    """The page shown when something failed that nobody predicted.
+
+    CLAUDE.md section 2: "Error messages must say what went wrong and what to do about
+    it, in English, not a stack trace alone." A bare 500 from the web server is the exact
+    thing that forbids, so nothing is allowed to reach one.
+    """
+    return _shell(
+        "Something went wrong",
+        f"""<div class="card">
+  <h2>Something went wrong</h2>
+  <p class="lede">{escape(message)}</p>
+  <p class="alt"><a href="{escape(back, quote=True)}">Back to Neutral</a></p>
+</div>""",
+    )
+
+
 # ---------------------------------------------------------------------------
 # sign up and sign in
 # ---------------------------------------------------------------------------

@@ -74,6 +74,13 @@ class AccountError(RuntimeError):
     """Something the person can fix, phrased so they can fix it."""
 
 
+STORAGE_HELP = (
+    "The account database could not be read or written. The usual cause is that the "
+    "accounts.db file was moved or deleted while Neutral was running. Stop Neutral with "
+    "Ctrl-C and run `make dev` again."
+)
+
+
 @dataclass(frozen=True)
 class Account:
     id: int
@@ -171,6 +178,11 @@ def create(db: sqlite3.Connection, email: str, password: str) -> Account:
             f"There is already an account for {address}. Sign in instead, or use a "
             f"different address."
         ) from exc
+    except sqlite3.Error as exc:
+        # Anything else the database can raise - a deleted file, a read-only disk, a
+        # locked database. None of it is the person's fault and none of it should reach
+        # them as a stack trace.
+        raise AccountError(STORAGE_HELP) from exc
     return Account(
         id=int(cursor.lastrowid or 0),
         email=address,
@@ -182,7 +194,10 @@ def create(db: sqlite3.Connection, email: str, password: str) -> Account:
 def authenticate(db: sqlite3.Connection, email: str, password: str) -> Account:
     """Return the account, or raise. The message never says which half was wrong."""
     address = normalise_email(email)
-    row = db.execute("SELECT * FROM accounts WHERE email = ?", (address,)).fetchone()
+    try:
+        row = db.execute("SELECT * FROM accounts WHERE email = ?", (address,)).fetchone()
+    except sqlite3.Error as exc:
+        raise AccountError(STORAGE_HELP) from exc
 
     # Hash anyway when there is no such account, so a missing address does not answer
     # faster than a wrong password and reveal who has signed up.
@@ -204,12 +219,15 @@ def set_model(db: sqlite3.Connection, account_id: int, provider: str, model: str
     if provider not in PROVIDERS:
         raise AccountError("Choose one of the listed models.")
     chosen = model.strip() or default_model_for(provider)
-    db.execute(
-        "UPDATE accounts SET provider = ?, model = ? WHERE id = ?",
-        (provider, chosen, account_id),
-    )
-    db.commit()
-    row = db.execute("SELECT * FROM accounts WHERE id = ?", (account_id,)).fetchone()
+    try:
+        db.execute(
+            "UPDATE accounts SET provider = ?, model = ? WHERE id = ?",
+            (provider, chosen, account_id),
+        )
+        db.commit()
+        row = db.execute("SELECT * FROM accounts WHERE id = ?", (account_id,)).fetchone()
+    except sqlite3.Error as exc:
+        raise AccountError(STORAGE_HELP) from exc
     if row is None:
         raise AccountError("That account no longer exists. Sign in again.")
     return Account(
@@ -218,4 +236,27 @@ def set_model(db: sqlite3.Connection, account_id: int, provider: str, model: str
 
 
 def count(db: sqlite3.Connection) -> int:
-    return int(db.execute("SELECT COUNT(*) FROM accounts").fetchone()[0])
+    try:
+        return int(db.execute("SELECT COUNT(*) FROM accounts").fetchone()[0])
+    except sqlite3.Error as exc:
+        raise AccountError(STORAGE_HELP) from exc
+
+
+def file_for(db: sqlite3.Connection) -> str:
+    """The path this connection was opened on, or "" for an in-memory database.
+
+    Used to notice that the file has been deleted out from under a live connection.
+    SQLite keeps writing happily to a deleted inode on some systems and refuses with
+    "readonly database" on others, and neither is something to show a person.
+    """
+    try:
+        row = db.execute("PRAGMA database_list").fetchone()
+    except sqlite3.Error:
+        return ""
+    return str(row[2]) if row and row[2] else ""
+
+
+def still_on_disk(db: sqlite3.Connection) -> bool:
+    """False when the file behind this connection has gone away."""
+    path = file_for(db)
+    return not path or Path(path).exists()

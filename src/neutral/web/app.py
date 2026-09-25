@@ -25,7 +25,7 @@ from neutral import accounts, errors
 from neutral.accounts import AccountError
 from neutral.adapters.providers import PROVIDERS, build, label_for
 from neutral.conversation import Conversation, ask
-from neutral.web.access import connect_page, signin_page, signup_page
+from neutral.web.access import connect_page, signin_page, signup_page, trouble_page
 from neutral.web.legal import PRIVACY, TERMS
 from neutral.web.page import legal_page, page
 from neutral.web.sessions import COOKIE, Session, Sessions
@@ -34,6 +34,28 @@ app = FastAPI(title="Neutral", docs_url=None, redoc_url=None)
 
 sessions = Sessions()
 
+UNEXPECTED = (
+    "Neutral hit a problem it did not expect and stopped rather than guessing. Nothing "
+    "was sent to a model. The details were printed in the terminal window running "
+    "Neutral - if this keeps happening, that text is what to report."
+)
+
+
+@app.middleware("http")
+async def never_show_a_stack_trace(request: Request, call_next):
+    """The last net. No route may answer with a bare Internal Server Error.
+
+    The conversation route already fails open to a readable message (S4). This catches
+    everything else - a database that vanished, a bug nobody predicted - so a person
+    always gets a sentence in English and the cause still lands in the terminal.
+    """
+    try:
+        return await call_next(request)
+    except Exception:  # noqa: BLE001 - that is the entire job
+        traceback.print_exc()
+        return HTMLResponse(trouble_page(UNEXPECTED), status_code=500)
+
+
 # One connection, shared. SQLite serialises writes itself but the Python driver is happier
 # with a lock in front of it, and FastAPI runs these handlers on a threadpool.
 _db_lock = threading.Lock()
@@ -41,8 +63,20 @@ _db = None
 
 
 def db():
+    """The account database, reopened if the file was deleted while we held it open.
+
+    Deleting accounts.db to start over is a reasonable thing to do, and doing it while
+    Neutral is running used to leave every later write failing with "readonly database"
+    until the server was restarted. Now the connection is simply reopened.
+    """
     global _db
     with _db_lock:
+        if _db is not None and not accounts.still_on_disk(_db):
+            try:
+                _db.close()
+            except Exception:  # noqa: BLE001 - closing a dead connection is not news
+                pass
+            _db = None
         if _db is None:
             _db = accounts.connect()
         return _db
@@ -156,7 +190,10 @@ def signin_form(request: Request):
     key, session = _session(request)
     if session.signed_in:
         return _go("/", key)
-    first_run = accounts.count(db()) == 0
+    try:
+        first_run = accounts.count(db()) == 0
+    except AccountError as exc:
+        return _html(trouble_page(str(exc)), key)
     return _html(signup_page() if first_run else signin_page(), key)
 
 

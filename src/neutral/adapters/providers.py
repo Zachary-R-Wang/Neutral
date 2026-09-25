@@ -75,9 +75,17 @@ PROVIDERS: dict[str, Provider] = {
         key_hint="starts xai-",
         key_url="https://console.x.ai",
     ),
+    "deepseek": Provider(
+        key="deepseek",
+        label="DeepSeek",
+        default_model="deepseek-chat",
+        models=("deepseek-chat", "deepseek-reasoner"),
+        key_hint="starts sk-",
+        key_url="https://platform.deepseek.com/api_keys",
+    ),
 }
 
-ORDER = ("anthropic", "openai", "google", "xai")
+ORDER = ("anthropic", "openai", "google", "xai", "deepseek")
 
 
 def default_model_for(provider: str) -> str:
@@ -96,6 +104,7 @@ def label_for(provider: str) -> str:
 _OPENAI_COMPATIBLE = {
     "openai": "https://api.openai.com/v1",
     "xai": "https://api.x.ai/v1",
+    "deepseek": "https://api.deepseek.com/v1",
 }
 
 
@@ -111,9 +120,18 @@ def _classify(status: int, body: str) -> str:
         return errors.RATE_LIMITED
     if status >= 500:
         return errors.SERVER_ERROR
+    if status == 402:
+        return errors.NO_CREDIT
     if any(
         phrase in lowered
-        for phrase in ("credit", "quota", "billing", "insufficient_quota", "exceeded")
+        for phrase in (
+            "credit",
+            "quota",
+            "billing",
+            "insufficient_quota",
+            "insufficient balance",
+            "exceeded",
+        )
     ):
         return errors.NO_CREDIT
     return errors.BAD_REQUEST

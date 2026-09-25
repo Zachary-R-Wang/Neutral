@@ -250,6 +250,7 @@ class TestTheUserChoosesWhereTheirPromptGoes:
             ("openai", "gpt-5-mini"),
             ("google", "gemini-2.5-flash"),
             ("xai", "grok-3"),
+            ("deepseek", "deepseek-reasoner"),
         ],
     )
     def test_the_chosen_provider_and_model_are_what_gets_used(self, client, provider, model):
@@ -372,6 +373,62 @@ class TestSigningInAndOut:
         _sign_up(other, "second@example.com")
         _connect(other)
         assert "Ravi Menon" not in other.get("/").text
+
+
+class TestAFailingDatabaseIsExplainedNotThrown:
+    """CLAUDE.md section 2: an error says what happened and what to do, in English.
+
+    These exist because signing up really did answer with a blank "Internal Server Error"
+    after accounts.db was deleted while the server was running. The page gave a person
+    with no way to debug it precisely nothing.
+    """
+
+    def test_a_deleted_database_is_reopened_rather_than_breaking_every_write(self, client):
+        _sign_up(client)
+        client.db_path.unlink()
+
+        got = client.post(
+            "/signup",
+            data={"email": "after@example.com", "password": PASSWORD},
+            follow_redirects=False,
+        )
+        assert got.status_code == 303, "signing up should work again, not fail"
+        assert client.db_path.exists()
+
+    def test_a_storage_failure_reads_as_a_sentence(self, client, monkeypatch):
+        def broken(*a, **k):
+            raise sqlite3.OperationalError("attempt to write a readonly database")
+
+        monkeypatch.setattr(app_module.accounts, "create", broken)
+        got = client.post(
+            "/signup", data={"email": EMAIL, "password": PASSWORD}, follow_redirects=False
+        )
+        assert got.status_code == 500
+        assert "Internal Server Error" not in got.text
+        assert "Something went wrong" in got.text
+        assert "OperationalError" not in got.text and "Traceback" not in got.text
+
+    def test_the_readable_message_says_what_to_do_about_it(self, db, tmp_path):
+        """Against a genuinely read-only database, which is the error that was hit."""
+        accounts.create(db, EMAIL, PASSWORD)
+        readonly = sqlite3.connect(f"file:{tmp_path / 'accounts.db'}?mode=ro", uri=True)
+        readonly.row_factory = sqlite3.Row
+
+        with pytest.raises(AccountError) as caught:
+            accounts.create(readonly, "other@example.com", PASSWORD)
+
+        message = str(caught.value)
+        assert "make dev" in message
+        assert "readonly" not in message and "sqlite" not in message.lower()
+
+    @pytest.mark.parametrize("path", ["/", "/signin", "/signup", "/connect"])
+    def test_no_page_can_answer_with_a_bare_server_error(self, client, monkeypatch, path):
+        monkeypatch.setattr(
+            app_module, "db", lambda: (_ for _ in ()).throw(RuntimeError("nothing works"))
+        )
+        got = client.get(path)
+        assert "Internal Server Error" not in got.text
+        assert "Traceback" not in got.text
 
 
 # ---------------------------------------------------------------------------

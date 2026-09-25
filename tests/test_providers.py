@@ -85,10 +85,15 @@ class TestAnswersComeBackTheSameShape:
         assert reply.ok and not reply.refused
         assert (reply.input_tokens, reply.output_tokens) == (40, 12)
 
-    def test_grok_goes_to_xai_not_openai(self, capture):
+    @pytest.mark.parametrize(
+        ("provider", "host"),
+        [("openai", "api.openai.com"), ("xai", "api.x.ai"), ("deepseek", "api.deepseek.com")],
+    )
+    def test_each_compatible_provider_goes_to_its_own_host(self, capture, provider, host):
+        """They share a request shape, so the base URL is the only thing keeping them apart."""
         capture["reply"] = _Response(200, OPENAI_OK)
-        build("xai", "k").complete(PROMPT)
-        assert "api.x.ai" in capture["url"]
+        build(provider, "k").complete(PROMPT)
+        assert host in capture["url"]
 
     def test_history_is_sent_in_each_providers_own_shape(self, capture):
         history = [("user", "Earlier question"), ("assistant", "Earlier answer")]
@@ -156,7 +161,19 @@ class TestFailuresSpeakTheNeutralVocabulary:
         reply = build(provider, "k").complete(PROMPT)
         assert reply.error_kind == kind
 
-    @pytest.mark.parametrize("provider", ["openai", "google", "xai"])
+    def test_running_out_of_money_is_not_reported_as_a_bad_request(self, capture):
+        """DeepSeek answers 402 with "Insufficient Balance" where others say "quota".
+
+        Both mean the same thing to the person reading it, and "the model rejected the
+        request" would send them looking for a fault in their prompt.
+        """
+        capture["reply"] = _Response(402, "Insufficient Balance")
+        assert build("deepseek", "k").complete(PROMPT).error_kind == errors.NO_CREDIT
+
+        capture["reply"] = _Response(400, "Insufficient Balance")
+        assert build("deepseek", "k").complete(PROMPT).error_kind == errors.NO_CREDIT
+
+    @pytest.mark.parametrize("provider", ["openai", "google", "xai", "deepseek"])
     def test_a_network_failure_is_returned_not_raised(self, provider, monkeypatch):
         def boom(*a, **k):
             raise httpx.ConnectError("no route to host")
@@ -166,7 +183,7 @@ class TestFailuresSpeakTheNeutralVocabulary:
         assert reply.error_kind == errors.UNREACHABLE
         assert isinstance(reply, Completion)
 
-    @pytest.mark.parametrize("provider", ["openai", "google", "xai"])
+    @pytest.mark.parametrize("provider", ["openai", "google", "xai", "deepseek"])
     def test_the_providers_own_wording_never_becomes_the_users_message(self, capture, provider):
         capture["reply"] = _Response(429, "OpenAI: slow down, see platform.openai.com")
         reply = build(provider, "k").complete(PROMPT)
