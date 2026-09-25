@@ -111,11 +111,11 @@ body{
   margin:0;color:var(--fg);
   background:linear-gradient(
     180deg,
-    hsl(144 21% 27%) 0%,
-    hsl(147 25% 21%) 11%,
-    hsl(150 31% 14.5%) 26%,
-    hsl(152 37% 10%) 46%,
-    hsl(155 43% 6.5%) 72%,
+    hsl(143 22% 33%) 0%,
+    hsl(146 25% 26%) 11%,
+    hsl(149 30% 18%) 27%,
+    hsl(152 36% 11.5%) 47%,
+    hsl(155 43% 7%) 73%,
     var(--plane-foot) 100%);
   background-attachment:fixed;
   font-family:"Geist","Geist Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,
@@ -211,7 +211,8 @@ details.original>summary:hover,details.original[open]>summary{color:var(--fg-2);
 
 /* the caret that types out the greeting, then rests blinking at the end */
 .caret{display:inline-block;width:2px;height:.78em;background:currentColor;
-  margin-left:3px;vertical-align:baseline;animation:caret 1.05s step-end infinite}
+  margin-left:3px;vertical-align:baseline;transform:translateY(1px);
+  animation:caret 1.05s step-end infinite}
 @keyframes caret{50%{opacity:0}}
 
 /* the model is composing */
@@ -238,7 +239,7 @@ form.composer.sticky::before{content:"";position:absolute;inset:-26px 0 auto 0;h
 .box{display:flex;gap:8px;align-items:flex-end;background:var(--panel);
   padding:9px 9px 9px 15px}
 textarea{flex:1;border:0;background:transparent;color:var(--fg);font:inherit;
-  font-size:15px;resize:none;outline:none;max-height:184px;min-height:26px;padding:4px 0}
+  font-size:15px;resize:none;outline:none;max-height:184px;min-height:40px;padding:8px 0}
 textarea::placeholder{color:var(--fg-3)}
 button{background:var(--solid);color:var(--on-solid);border:0;
   clip-path:polygon(4px 0,calc(100% - 4px) 0,100% 4px,100% calc(100% - 4px),
@@ -414,7 +415,7 @@ COMPOSER_JS = """
   // scrollHeight comes back as 180 on an empty box, which then sticks - the natural
   // height from CSS is 32px and correct. Growth only matters once someone types.
   function grow(){ t.style.height='0px';
-    t.style.height=Math.max(26,Math.min(t.scrollHeight,180))+'px'; }
+    t.style.height=Math.max(40,Math.min(t.scrollHeight,184))+'px'; }
   t.addEventListener('input',grow);
 
   function oct(cls, inner){
