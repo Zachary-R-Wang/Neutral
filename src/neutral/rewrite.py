@@ -154,6 +154,12 @@ def rewrite(
                 restoration = applied.restoration
 
     if ORDER in mechanisms:
+        # Who is the subject first, then who is named first. The passive puts the verb
+        # between the two people, so the naming-order swap - which only acts on people
+        # joined by "and", "or" or a comma - cannot then act on the same pair twice.
+        roles = order_neutralisation.apply_roles(prompt, segments)
+        segments = roles.segments
+        transforms.extend(roles.transforms)
         reordered = order_neutralisation.apply(segments)
         segments = reordered.segments
         transforms.extend(reordered.transforms)

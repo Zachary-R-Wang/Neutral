@@ -5,6 +5,38 @@ minds. Newest first.
 
 ---
 
+## 2026-09-26 — Mechanism 2 also moves who is the subject, by changing grammar, not roles
+
+**The instruction.** Order neutralisation is not only who is named first but "randomising
+who the subject and object is".
+
+**What was built, and what was refused.** Swapping the roles changes the facts. "Should
+Priya replace Greg?" and "Should Greg replace Priya?" are different questions; the model
+would answer the second, and restoration would hand back an answer about the wrong
+person. S1 forbids telling the model something false about a real person, and Phase 3
+forbids returning an answer about the wrong subject. So the roles never move.
+
+What moves is the grammar. "Should Greg be replaced by Priya?" asks the same question
+with Greg as the subject. On a coin - seeded from the rewritten text, like the naming
+order, so the two halves of a matched pair always get the same toss - Neutral uses the
+passive, which puts the person acted upon at the front and keeps who did what.
+
+**Why so narrow.** It fires only when the parser is unambiguous that one person acts
+directly on another, with a verb from a vetted list of about sixty whose passive form is
+written down rather than generated. A verb not on the list, "reports to", "took over
+from", a negation, a perfect tense - all left exactly as written. One case matters in
+particular: the parser misreads "Did Anna mentor Ben?", and the rule that the doer, the
+verb and the receiver must all line up is what stops that misreading becoming a
+rewritten prompt. S4: a half-rewritten prompt is worse than none.
+
+**Unmeasured.** No pair in the evaluation dataset has one person acting on another in
+this shape, so it fired on none of the seventy. It is live and tested for correctness,
+and nothing is known about whether it changes outcomes. The same is true of the
+naming-order swap. Measuring either needs new pairs, which is a dataset change and means
+re-running the baseline.
+
+---
+
 ## 2026-09-25 — The custom model box counts only when it is ticked
 
 **What happened.** The founder picked a model from the list on the live site and got

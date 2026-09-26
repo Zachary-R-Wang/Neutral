@@ -7,6 +7,16 @@ before the numbers arrive is a design note; one added afterwards looks like an e
 
 ---
 
+## Two of the four things Neutral does have never been measured
+
+Swapping who is named first, and making the other person the grammatical subject, are
+built and live. Neither has been tested for whether it changes an answer, because none of
+the seventy evaluation pairs varies either thing. They are correct - tests hold that the
+facts never move - but whether they matter is unknown.
+
+The subject swap is also narrow by design: about sixty verbs, simple sentences only. Most
+real sentences about two people fall outside it and are sent as written.
+
 ## Neutral protects some people better than others
 
 Its name detection finds African and East Asian names about 18 percentage points less

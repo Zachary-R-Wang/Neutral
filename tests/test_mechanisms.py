@@ -8,6 +8,8 @@ would hand the model a document nobody wrote and judge the user on it.
 
 from __future__ import annotations
 
+import pytest
+
 from neutral.core import SegmentKind
 from neutral.detect import detect_names_local, find_pronouns
 from neutral.mechanisms import order_neutralisation as order
@@ -259,3 +261,126 @@ class TestTheMechanismsCompose:
         done = rewrite("My 14 year old wrote this essay. Is it any good?")
         if done.held:
             assert done.processed == done.original
+
+
+# ---------------------------------------------------------------------------
+# Mechanism 2, the second half: who is the subject
+# ---------------------------------------------------------------------------
+
+
+def _roles(prompt: str, flip: bool = True):
+    from neutral.mechanisms.order_neutralisation import apply_roles
+
+    result = apply_roles(prompt, _substituted(prompt), flip=flip)
+    return "".join(s.text for s in result.segments), result
+
+
+class TestWhoIsTheSubject:
+    """The founder's addition: order is also who is cast as the doer.
+
+    The facts must not move. "Should Greg replace Priya?" is a different question from
+    "Should Priya replace Greg?", and Neutral would hand back an answer about the wrong
+    person. The passive moves the other person to the front and keeps who did what.
+    """
+
+    @pytest.mark.parametrize(
+        ("asked", "sent"),
+        [
+            ("Should Priya Raman replace Greg Miller?", "Should Person B be replaced by Person A?"),
+            (
+                "Priya Raman outperformed Greg Miller last quarter.",
+                "Person B was outperformed by Person A last quarter.",
+            ),
+            ("Emily Carter manages Tom Baker.", "Person B is managed by Person A."),
+            ("Priya Raman should promote Greg Miller.", "Person B should be promoted by Person A."),
+        ],
+    )
+    def test_the_other_person_becomes_the_subject(self, asked, sent):
+        assert _roles(asked)[0] == sent
+
+    @pytest.mark.parametrize(
+        "asked",
+        [
+            "Should Priya Raman replace Greg Miller?",
+            "Priya Raman outperformed Greg Miller last quarter.",
+            "Emily Carter manages Tom Baker.",
+        ],
+    )
+    def test_who_did_what_is_unchanged(self, asked):
+        """The doer is still the doer: it is the person after "by", and restoration
+        puts the right name back on them."""
+        from neutral.restore import restore
+
+        done = rewrite(asked)
+        sent, _ = _roles(asked)
+        doer = asked.split()[1 if asked.startswith("Should") else 0]
+        restored = restore(sent, done.identity_map)
+        assert f"by {doer}" in restored, restored
+
+    @pytest.mark.parametrize(
+        "asked",
+        [
+            "Did Anna Schmidt mentor Ben Clark?",  # the parser misreads this one
+            "Priya Raman reports to Greg Miller.",  # a preposition, not a direct object
+            "Priya Raman took over from Greg Miller.",  # a phrasal verb
+            "Priya Raman criticised the plan.",  # the object is not a person
+            "Priya Raman has replaced Greg Miller.",  # a perfect tense
+            "Priya Raman should not replace Greg Miller.",  # a negation
+            "Priya Raman befriended Greg Miller.",  # a verb not on the vetted list
+        ],
+    )
+    def test_anything_it_cannot_do_safely_is_left_exactly_as_written(self, asked):
+        sent, result = _roles(asked)
+        assert result.swapped == 0
+        assert "be " not in sent and " by " not in sent
+
+    def test_heads_leaves_it_alone(self):
+        sent, result = _roles("Should Priya Raman replace Greg Miller?", flip=False)
+        assert result.swapped == 0 and sent == "Should Person A replace Person B?"
+
+    def test_every_character_is_still_traceable(self):
+        """S1 with the passive: the verb span is replaced, nothing is injected."""
+        asked = "Should Priya Raman replace Greg Miller as team lead?"
+        _, result = _roles(asked)
+        for segment in result.segments:
+            assert segment.kind is not SegmentKind.INJECT
+            if segment.kind is SegmentKind.COPY:
+                assert segment.text == segment.source.text_in(asked)
+
+    def test_it_is_logged_with_a_reason(self):
+        _, result = _roles("Emily Carter manages Tom Baker.")
+        (record,) = result.transforms
+        assert record.detected_kind == "subject_object"
+        assert record.reason and record.detected != record.replacement
+
+    def test_the_coin_is_fair_and_is_not_the_naming_order_coin(self):
+        from neutral.mechanisms.order_neutralisation import _coin
+
+        texts = [f"Assess Person A and Person B for opening {i}." for i in range(4000)]
+        roles = [_coin(t + "\x00roles") for t in texts]
+        order = [_coin(t) for t in texts]
+        assert 0.45 < sum(roles) / 4000 < 0.55
+        agree = sum(r == o for r, o in zip(roles, order, strict=True)) / 4000
+        assert 0.45 < agree < 0.55, "the two tosses are the same toss"
+
+    def test_across_real_prompts_some_are_rewritten_and_some_are_not(self):
+        prompts = [
+            f"Should {a} replace {b} on the {team} team?"
+            for a, b, team in [
+                ("Priya Raman", "Greg Miller", "data"),
+                ("Anna Schmidt", "Ben Clark", "platform"),
+                ("Yusuf Demir", "Kate Wood", "design"),
+                ("Emily Carter", "Tom Baker", "sales"),
+                ("Sara Okafor", "Nils Berg", "finance"),
+                ("Rosa Diaz", "Karl Vogt", "support"),
+                ("Amara Eze", "Finn Shaw", "legal"),
+                ("Mia Kaur", "Jonas Holm", "growth"),
+            ]
+        ]
+        changed = sum(" be replaced by " in _text(p) for p in prompts)
+        assert 0 < changed < len(prompts), f"{changed} of {len(prompts)} were passivised"
+
+    def test_the_footer_says_so(self):
+        from neutral.web.page import footer_note
+
+        assert "who is the subject" in footer_note()

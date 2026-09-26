@@ -48,7 +48,7 @@ HEAD_ICONS = (
 MECHANISM_WORDS = {
     "identity_substitution": "names and pronouns",
     "person_neutralisation": "who wrote it",
-    "order_neutralisation": "who is named first",
+    "order_neutralisation": "who is named first and who is the subject",
 }
 
 
