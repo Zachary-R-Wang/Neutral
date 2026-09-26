@@ -46,17 +46,19 @@ HEAD_ICONS = (
 # typed by hand saying "Phase 1 - names and bound pronouns only", which stayed on the page
 # for a day after Mechanisms 2 and 3 went live and told the founder they did not exist.
 MECHANISM_WORDS = {
-    "identity_substitution": "names and pronouns",
-    "person_neutralisation": "who wrote it",
-    "order_neutralisation": "who is named first and who is the subject",
+    "identity_substitution": ("names and pronouns",),
+    "person_neutralisation": ("who wrote it",),
+    # Two things, listed as two, so the sentence reads as one list with one "and".
+    "order_neutralisation": ("who is named first", "who is the subject"),
 }
 
 
 def footer_note() -> str:
     from neutral.rewrite import DEFAULT_MECHANISMS
 
-    parts = [MECHANISM_WORDS[m] for m in DEFAULT_MECHANISMS if m in MECHANISM_WORDS]
-    return "Neutralises " + ", ".join(parts[:-1]) + (" and " if len(parts) > 1 else "") + parts[-1]
+    parts = [phrase for m in DEFAULT_MECHANISMS for phrase in MECHANISM_WORDS.get(m, ())]
+    listed = ", ".join(parts[:-1]) + (" and " if len(parts) > 1 else "") + parts[-1]
+    return "Neutralises " + listed
 
 
 PLACEHOLDER = "Ask anything!"

@@ -437,7 +437,16 @@ class TestTheFooterSaysWhatIsActuallyRunning:
 
         for mechanism in DEFAULT_MECHANISMS:
             assert mechanism in MECHANISM_WORDS, f"{mechanism} runs but has no description"
-            assert MECHANISM_WORDS[mechanism] in footer_note()
+            for phrase in MECHANISM_WORDS[mechanism]:
+                assert phrase in footer_note()
+
+    def test_it_reads_as_one_list(self):
+        """It once said "who wrote it and who is named first and who is the subject"."""
+        from neutral.web.page import footer_note
+
+        note = footer_note()
+        tail = note.split(", ")[-1]
+        assert tail.count(" and ") == 1, note
 
     def test_the_stale_label_is_gone_from_every_page(self):
         from neutral.web.access import connect_page, signin_page, signup_page
