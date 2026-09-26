@@ -14,7 +14,7 @@ PY := .venv/bin/python
 RUN := PYTHONPATH=src $(PY)
 
 .DEFAULT_GOAL := help
-.PHONY: help dev test eval lint dataset clean deploy
+.PHONY: help dev test eval lint dataset clean deploy email
 
 help:
 	@echo ""
@@ -27,6 +27,7 @@ help:
 	@echo "    make dataset  Print the matched prompt pairs to check them by eye."
 	@echo "    make lint     Check code style."
 	@echo "    make deploy   Test, then put the current version on neutralai.app."
+	@echo "    make email    Connect Resend, so password reset emails can be sent."
 	@echo ""
 
 .venv:
@@ -86,6 +87,22 @@ deploy: .venv
 		echo ""; exit 1; }
 	@echo ""
 	@echo "  Live at https://neutralai.app"
+
+# Turns on password reset. Asks for the Resend key with typing hidden, so it never
+# appears on screen, in shell history, or anywhere it could be copied from - and hands
+# it straight to Fly as a secret. It is never written to a file in this repository.
+email:
+	@command -v flyctl >/dev/null 2>&1 || { echo "  flyctl is not installed: brew install flyctl"; exit 1; }
+	@echo ""
+	@echo "  This needs a Resend account with neutralai.app verified as a sending domain."
+	@echo "  If you have not done that yet, stop here (Ctrl-C) - see the steps in LIMITATIONS.md."
+	@echo ""
+	@printf "  Paste your Resend API key (nothing will show as you paste): "; \
+	stty -echo; read key; stty echo; echo ""; \
+	case "$$key" in re_*) ;; *) echo ""; echo "  That does not look like a Resend key - they start with re_. Nothing was changed."; exit 1;; esac; \
+	flyctl secrets set -a neutralai RESEND_API_KEY="$$key" NEUTRAL_MAIL_FROM="Neutral <noreply@neutralai.app>" \
+	  && { echo ""; echo "  Done. Neutral restarts to pick this up, which signs everyone out once."; \
+	       echo "  Try it: https://neutralai.app/forgot"; echo ""; }
 
 clean:
 	@rm -rf .pytest_cache .ruff_cache reports/*.json reports/*.html

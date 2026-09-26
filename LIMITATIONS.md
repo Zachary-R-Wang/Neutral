@@ -81,6 +81,22 @@ page says so plainly and points at a contact address rather than pretending a li
 its way — but on such an installation, a forgotten password is still a dead account until
 somebody fixes it by hand.
 
+**Turning it on** takes about ten minutes, and only the founder can do it, because it
+needs his accounts:
+
+1. Sign up at resend.com.
+2. In Resend, go to **Domains → Add Domain** and enter `neutralai.app`. It shows three or
+   four DNS records.
+3. In Porkbun, open `neutralai.app` → **DNS** and add each record exactly as Resend shows
+   it. Leave the existing A and AAAA records alone - those are what keep the site up.
+4. Back in Resend, press **Verify**. It can take a few minutes to turn green.
+5. In Resend, go to **API Keys → Create API Key**, and copy it. It starts `re_`.
+6. In a terminal in this project, run `make email` and paste the key when asked. Nothing
+   shows while you paste, on purpose.
+
+Until then, a locked-out account can be let back in by generating a single-use reset link
+on the server, which does not need email - but that is a person doing it by hand.
+
 ## The rate limiting is a speed bump, not a defence
 
 The sign-in, sign-up and reset forms count failed attempts against both the address and
