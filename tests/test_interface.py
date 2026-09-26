@@ -444,3 +444,71 @@ class TestTheFooterSaysWhatIsActuallyRunning:
 
         for html in (page(), signin_page(), signup_page(), connect_page(email="a@b.com")):
             assert "Phase 1" not in html
+
+
+class TestTheMark:
+    """The logo beside the name, and in the browser tab."""
+
+    def test_every_page_has_the_mark_beside_the_name(self):
+        from neutral.web.access import connect_page, signin_page, signup_page, trouble_page
+        from neutral.web.page import legal_page
+
+        pages = (
+            page(),
+            signin_page(),
+            signup_page(),
+            connect_page(email="a@b.com"),
+            trouble_page("x"),
+            legal_page("Terms", "text"),
+        )
+        for html in pages:
+            header = html[html.index('<div class="top">') :][:2000]
+            name = header.index("Neutral")
+            assert 'class="mark"' in header[name : name + 400], "mark is not beside the name"
+
+    def test_every_page_asks_for_the_tab_icon_and_keeps_its_title(self):
+        from neutral.web.access import signin_page
+        from neutral.web.page import legal_page
+
+        for html, title in (
+            (page(), "Neutral"),
+            (signin_page(), "Sign In &mdash; Neutral"),
+            (legal_page("Privacy", "x"), "Privacy &mdash; Neutral"),
+        ):
+            assert 'rel="icon" href="/favicon.svg"' in html
+            assert 'rel="icon" href="/favicon.ico"' in html
+            assert f"<title>{title}</title>" in html
+
+    def test_the_icon_files_are_served_as_the_right_kind_of_file(self):
+        from fastapi.testclient import TestClient
+
+        from neutral.web.app import app
+
+        client = TestClient(app)
+        for path, kind in (
+            ("/favicon.ico", "image/x-icon"),
+            ("/favicon.svg", "image/svg+xml"),
+            ("/apple-touch-icon.png", "image/png"),
+        ):
+            got = client.get(path)
+            assert got.status_code == 200, path
+            assert got.headers["content-type"].startswith(kind), path
+            assert len(got.content) > 100, path
+
+    def test_the_icon_on_disk_was_drawn_from_the_current_geometry(self):
+        """If brand.py changes and tools/make_icons.py is not re-run, the tab icon would
+        quietly show the old mark. This catches it for the SVG, which is text."""
+        from pathlib import Path
+
+        from neutral.web.brand import favicon_svg
+
+        on_disk = (
+            Path(__file__).resolve().parent.parent / "src/neutral/web/static/favicon.svg"
+        ).read_text()
+        assert on_disk == favicon_svg(), "run: uv run --with pillow python tools/make_icons.py"
+
+    def test_the_mark_is_the_founders_colour(self):
+        from neutral.web.brand import INK, mark_svg
+
+        assert INK == "#586a60"
+        assert INK in mark_svg()

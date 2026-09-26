@@ -18,9 +18,10 @@ from __future__ import annotations
 import os
 import threading
 import traceback
+from pathlib import Path
 
 from fastapi import FastAPI, Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 
 from neutral import accounts, errors, mailer
 from neutral.accounts import AccountError
@@ -460,6 +461,41 @@ def terms() -> HTMLResponse:
 @app.get("/privacy", response_class=HTMLResponse)
 def privacy() -> HTMLResponse:
     return HTMLResponse(legal_page("Privacy", PRIVACY))
+
+
+STATIC = Path(__file__).resolve().parent / "static"
+
+# The tab icons, drawn by tools/make_icons.py from neutral/web/brand.py. Named routes
+# rather than a mounted folder: there are four files, and a mount would publish anything
+# that ever landed in that folder.
+ICONS = {
+    "favicon.ico": "image/x-icon",
+    "favicon.svg": "image/svg+xml",
+    "apple-touch-icon.png": "image/png",
+}
+
+
+def _icon(name: str) -> FileResponse:
+    return FileResponse(
+        STATIC / name,
+        media_type=ICONS[name],
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon_ico() -> FileResponse:
+    return _icon("favicon.ico")
+
+
+@app.get("/favicon.svg", include_in_schema=False)
+def favicon_svg() -> FileResponse:
+    return _icon("favicon.svg")
+
+
+@app.get("/apple-touch-icon.png", include_in_schema=False)
+def apple_touch_icon() -> FileResponse:
+    return _icon("apple-touch-icon.png")
 
 
 @app.get("/health")

@@ -18,7 +18,7 @@ from html import escape
 from neutral.adapters.providers import ORDER, PROVIDERS, looks_like_model
 from neutral.invariants import BANNER
 from neutral.web.legal import CONTACT
-from neutral.web.page import CORNER, CSS, footer_note
+from neutral.web.page import BRAND, CORNER, CSS, HEAD_ICONS, footer_note
 
 MODEL_JS = """
 (function(){
@@ -78,13 +78,14 @@ def _shell(title: str, body: str, *, script: str = "", corner: bool = True) -> s
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{escape(title)} &mdash; Neutral</title>
+{HEAD_ICONS}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet"
   href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono&display=swap">
 <style>{CSS}</style></head><body>{CORNER if corner else ""}<div class="wrap">
 <div class="top">
-  <h1>Neutral</h1>
+  {BRAND}
   <div class="notice">{escape(BANNER)}</div>
 </div>
 {body}

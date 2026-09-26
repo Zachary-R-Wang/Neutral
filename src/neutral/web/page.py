@@ -24,10 +24,22 @@ from html import escape
 
 from neutral.conversation import Conversation, Turn
 from neutral.invariants import BANNER
-from neutral.web import dither
+from neutral.web import brand, dither
 
 # Built once at import: a seeded pattern, so the page looks the same on every load.
 CORNER = dither.build()
+
+# The name with the mark beside it, as it appears at the top of every page.
+BRAND = f"<h1>Neutral{brand.mark_svg(11)}</h1>"
+
+# Tab icons. The .ico is marked 32x32 so Chrome does not prefer it over the SVG, which
+# stays sharp at any size; Safari, which does not use SVG in tabs, takes the .ico; the
+# Apple icon is for a phone's home screen.
+HEAD_ICONS = (
+    '<link rel="icon" href="/favicon.ico" sizes="32x32">'
+    '<link rel="icon" href="/favicon.svg" type="image/svg+xml">'
+    '<link rel="apple-touch-icon" href="/apple-touch-icon.png">'
+)
 
 # What each running mechanism does, in words a visitor would use. The footer is built from
 # whichever mechanisms are actually enabled, so it cannot drift: it used to be a sentence
@@ -168,7 +180,9 @@ body{
 
 /* header -------------------------------------------------------------------- */
 .top{display:flex;align-items:center;gap:12px;padding-bottom:28px}
-.top h1{font-size:15px;font-weight:500;margin:0;letter-spacing:-.01em}
+.top h1{font-size:15px;font-weight:500;margin:0;letter-spacing:-.01em;
+  display:inline-flex;align-items:center;gap:7px}
+.top h1 .mark{display:block;flex:none}
 .notice{display:flex;align-items:center;gap:7px;margin-left:auto;font-size:12px;
   color:var(--fg-2);letter-spacing:-.005em}
 .notice::before{content:"";width:5px;height:5px;border-radius:50%;
@@ -699,13 +713,14 @@ def page(
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Neutral</title>
+{HEAD_ICONS}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet"
   href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono&display=swap">
 <style>{CSS}</style></head><body>{CORNER}<div class="wrap">
 <div class="top{" tight" if who else ""}">
-  <h1>Neutral</h1>
+  {BRAND}
   <div class="notice">{escape(BANNER)}</div>
 </div>
 {who}
@@ -745,13 +760,14 @@ def legal_page(title: str, body: str) -> str:
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{escape(title)} &mdash; Neutral</title>
+{HEAD_ICONS}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet"
   href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono&display=swap">
 <style>{CSS}</style></head><body><div class="wrap legal">
 <div class="top">
-  <h1>Neutral</h1>
+  {BRAND}
   <div class="notice">{escape(BANNER)}</div>
 </div>
 <a class="back" href="/">&larr; Back</a>
