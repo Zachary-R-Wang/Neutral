@@ -425,3 +425,22 @@ class TestNothingChangedMeansOneAnswer:
         assert adapter.calls == 1
         assert turn.changes
         assert "Before names were put back" in page(conversation)
+
+
+class TestTheFooterSaysWhatIsActuallyRunning:
+    """It said "Phase 1 - names and bound pronouns only" for a day after Mechanisms 2 and 3
+    went live, and the founder reasonably concluded they had not been built."""
+
+    def test_every_running_mechanism_is_described(self):
+        from neutral.rewrite import DEFAULT_MECHANISMS
+        from neutral.web.page import MECHANISM_WORDS, footer_note
+
+        for mechanism in DEFAULT_MECHANISMS:
+            assert mechanism in MECHANISM_WORDS, f"{mechanism} runs but has no description"
+            assert MECHANISM_WORDS[mechanism] in footer_note()
+
+    def test_the_stale_label_is_gone_from_every_page(self):
+        from neutral.web.access import connect_page, signin_page, signup_page
+
+        for html in (page(), signin_page(), signup_page(), connect_page(email="a@b.com")):
+            assert "Phase 1" not in html

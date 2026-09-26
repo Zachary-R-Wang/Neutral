@@ -18,7 +18,7 @@ from html import escape
 from neutral.adapters.providers import ORDER, PROVIDERS, looks_like_model
 from neutral.invariants import BANNER
 from neutral.web.legal import CONTACT
-from neutral.web.page import CORNER, CSS
+from neutral.web.page import CORNER, CSS, footer_note
 
 MODEL_JS = """
 (function(){
@@ -90,7 +90,7 @@ def _shell(title: str, body: str, *, script: str = "", corner: bool = True) -> s
 {body}
 <div class="foot">
   <a href="/terms">Terms</a><a href="/privacy">Privacy</a>
-  <span>Phase 1 &mdash; names and bound pronouns only</span>
+  <span>{escape(footer_note())}</span>
 </div>
 </div>{f"<script>{script}</script>" if script else ""}</body></html>
 """

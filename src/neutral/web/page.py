@@ -29,6 +29,24 @@ from neutral.web import dither
 # Built once at import: a seeded pattern, so the page looks the same on every load.
 CORNER = dither.build()
 
+# What each running mechanism does, in words a visitor would use. The footer is built from
+# whichever mechanisms are actually enabled, so it cannot drift: it used to be a sentence
+# typed by hand saying "Phase 1 - names and bound pronouns only", which stayed on the page
+# for a day after Mechanisms 2 and 3 went live and told the founder they did not exist.
+MECHANISM_WORDS = {
+    "identity_substitution": "names and pronouns",
+    "person_neutralisation": "who wrote it",
+    "order_neutralisation": "who is named first",
+}
+
+
+def footer_note() -> str:
+    from neutral.rewrite import DEFAULT_MECHANISMS
+
+    parts = [MECHANISM_WORDS[m] for m in DEFAULT_MECHANISMS if m in MECHANISM_WORDS]
+    return "Neutralises " + ", ".join(parts[:-1]) + (" and " if len(parts) > 1 else "") + parts[-1]
+
+
 PLACEHOLDER = "Ask anything!"
 
 # The server cannot know the visitor's local time, so the greeting is chosen in the
@@ -696,7 +714,7 @@ def page(
 {body}
 <div class="foot">
   <a href="/terms">Terms</a><a href="/privacy">Privacy</a>
-  <span>Phase 1 &mdash; names and bound pronouns only</span>
+  <span>{escape(footer_note())}</span>
 </div>
 </div><script>{COMPOSER_JS}</script></body></html>
 """
