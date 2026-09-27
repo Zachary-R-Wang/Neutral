@@ -22,6 +22,7 @@ already tied to a person is the more specific claim.
 
 from __future__ import annotations
 
+import string
 from dataclasses import dataclass, field
 
 from neutral.core import Segment, SegmentKind, Span, TransformRecord
@@ -51,6 +52,8 @@ class Rewrite:
     identity_map: dict[str, str] = field(default_factory=dict)
     pronoun_style: dict[str, str] = field(default_factory=dict)
     restoration: dict[str, str] = field(default_factory=dict)
+    # How to put the asker back into the answer; see restore._restore_asker.
+    asker: dict[str, str] = field(default_factory=dict)
     held: bool = False
     held_reason: str = ""
 
@@ -143,15 +146,21 @@ def rewrite(
     segments = substitution.segments
     transforms = list(substitution.transforms)
     restoration: dict[str, str] = {}
+    asker: dict[str, str] = {}
 
     if PERSON in mechanisms:
-        refs, framing = person_neutralisation.find_person_refs(prompt)
+        # The asker becomes the next person along: with Priya already "Person A", the
+        # asker is "Person B". Chosen here, because Mechanism 3 does not know who
+        # Mechanism 1 has named and must not ask it.
+        self_label = f"Person {string.ascii_uppercase[len(substitution.identity_map)]}"
+        refs, framing = person_neutralisation.find_person_refs(prompt, self_label)
         if refs:
             segments, used = _splice(segments, refs, prompt)
             if used:
-                applied = person_neutralisation.apply(prompt, used, framing)
+                applied = person_neutralisation.apply(prompt, used, framing, self_label)
                 transforms.extend(applied.transforms)
                 restoration = applied.restoration
+                asker = applied.asker
 
     if ORDER in mechanisms:
         # Who is the subject first, then who is named first. The passive puts the verb
@@ -181,4 +190,5 @@ def rewrite(
         identity_map=substitution.identity_map,
         pronoun_style=substitution.pronoun_style,
         restoration=restoration,
+        asker=asker,
     )

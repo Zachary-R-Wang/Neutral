@@ -66,13 +66,22 @@ count(B-first) differ by 0 when the total is even, and by exactly 1 when it is o
 First-person framing tells the model the user is the author or the subject, which is the
 trigger for favourable treatment.
 
-- "my essay" → "the essay"; "I wrote" → "the author wrote".
+- A claim to have made the thing being judged: "I wrote" → "the author wrote", "my
+  essay" → "the author's essay".
+- Every other self-reference becomes one more person, labelled like the people Mechanism
+  1 has already named. "I think my manager Priya Raman is unfair to me" → "Person B
+  thinks Person B's manager Person A is unfair to Person B". The verbs are made to agree
+  ("Do I" → "Does Person B", "I'm" → "Person B is"). Never "the asker" or "the user":
+  a label that says it is the person typing gives away what this exists to hide.
+- Quoted or indented work is never touched; that is the thing being assessed.
 - Gendered pronouns become "they"/"them", or the sentence is rewritten to avoid a pronoun
   where that reads better.
 - Relationship words carry the same load as pronouns. "My boyfriend" states the partner's
   gender and implies the user's. "boy" additionally states age.
 - Reversed on the way out: the answer comes back in second person, so the user reads
-  "your essay", not "the author's essay".
+  "your essay", not "the author's essay", and "You should talk to your manager", not
+  "Person B should talk to their manager". A "them" in the asker's own clause ("Person B
+  should tell them") is somebody else, and is left alone.
 
 ## Mechanism 4 — Comparison framing (opt-in)
 

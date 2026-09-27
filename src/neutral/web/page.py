@@ -47,7 +47,7 @@ HEAD_ICONS = (
 # for a day after Mechanisms 2 and 3 went live and told the founder they did not exist.
 MECHANISM_WORDS = {
     "identity_substitution": ("names and pronouns",),
-    "person_neutralisation": ("who wrote it",),
+    "person_neutralisation": ("who is asking",),
     # Two things, listed as two, so the sentence reads as one list with one "and".
     "order_neutralisation": ("who is named first", "who is the subject"),
 }
@@ -241,8 +241,14 @@ details.original>summary:hover,details.original[open]>summary{color:var(--fg-2);
 .prose.small ul,.prose.small ol{margin:0 0 9px;padding-left:18px}
 .prose.small li{margin:0 0 3px}
 .prose.small hr{margin:12px 0}
+.raw .sent{font-size:13px;line-height:1.55;color:var(--fg-2);white-space:pre-wrap;
+  overflow-wrap:anywhere}
+.raw .label.after{margin-top:12px;padding-top:10px;border-top:1px solid var(--line-2)}
 .raw .changes{margin-top:10px;padding-top:9px;border-top:1px solid var(--line-2);
   font-size:12px;color:var(--fg-3)}
+.raw .changes ul{list-style:none;margin:5px 0 0;padding:0}
+.raw .changes li{margin:0 0 4px;line-height:1.6}
+.raw .changes li span{color:var(--fg-2);margin-right:4px}
 .raw .changes code{font-family:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
   font-size:11.5px;color:var(--fg-2)}
 
@@ -508,14 +514,42 @@ def _flag(turn: Turn) -> str:
     return f'<div class="oct flag{stop}">{escape(turn.note)}</div>'
 
 
+# One line per mechanism, so it is plain which of them fired. A flat list of every swap
+# buried the second and third under the names, and read as though they never ran.
+CHANGE_HEADINGS = {
+    "identity_substitution": "Names",
+    "person_neutralisation": "Who is asking",
+    "order_neutralisation": "Order",
+}
+
+
 def _changes(turn: Turn) -> str:
     if not turn.changes:
         return ""
-    items = ", ".join(
-        f"<code>{escape(c.detected)}</code> &rarr; <code>{escape(c.replacement)}</code>"
-        for c in turn.changes
+    grouped: dict[str, list[tuple[str, str]]] = {}
+    for c in turn.changes:
+        pairs = grouped.setdefault(c.mechanism, [])
+        if (c.detected, c.replacement) not in pairs:
+            pairs.append((c.detected, c.replacement))
+    lines = "".join(
+        f"<li><span>{escape(CHANGE_HEADINGS.get(mechanism, mechanism))}</span> "
+        + ", ".join(
+            f"<code>{escape(before)}</code> &rarr; <code>{escape(after)}</code>"
+            for before, after in pairs
+        )
+        + "</li>"
+        for mechanism, pairs in grouped.items()
     )
-    return f'<div class="changes">Removed before sending: {items}</div>'
+    return f'<div class="changes">Changed before sending<ul>{lines}</ul></div>'
+
+
+def _sent(turn: Turn) -> str:
+    if not turn.sent:
+        return ""
+    return (
+        '<div class="label">What the model was sent</div>'
+        f'<div class="sent">{escape(turn.sent)}</div>'
+    )
 
 
 def _turn(turn: Turn) -> str:
@@ -529,21 +563,23 @@ def _turn(turn: Turn) -> str:
 
     if turn.failed and turn.changes:
         reply.append(
-            '<details class="original" open><summary>What Neutral would have removed'
+            '<details class="original" open><summary>What Neutral would have changed'
             '</summary><div class="oct raw"><div class="label">Computed locally, nothing '
             f"was sent</div>{_changes(turn)}</div></details>"
         )
 
-    # The same reply, before names were put back. No second call; this is what the model
-    # actually wrote, which is the honest thing to show under "what did Neutral do".
+    # What went in and what came out, before anything was put back. No second call; this
+    # is what the model actually received and wrote, which is the honest answer to "what
+    # did Neutral do". Collapsed, so the thread still reads as a conversation.
     if turn.neutral_answer and not turn.untouched:
         reply.append(
             '<details class="original">'
-            "<summary>Before names were put back</summary>"
-            '<div class="oct raw"><div class="label">What the model wrote, with the '
-            "identity still removed</div>"
+            "<summary>What Neutral changed</summary>"
+            f'<div class="oct raw">{_sent(turn)}{_changes(turn)}'
+            '<div class="label after">What the model wrote, before names were put back'
+            "</div>"
             f'<div class="prose small">{markdown(turn.neutral_answer)}</div>'
-            f"{_changes(turn)}</div></details>"
+            "</div></details>"
         )
     reply.append("</div>")
     parts.append("".join(reply))

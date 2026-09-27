@@ -39,8 +39,20 @@ NAME = "person_neutralisation"
 REFERENT = "the author"
 POSSESSIVE = "the author's"
 
+# Any other self-reference. "the author" would claim authorship where there is none -
+# "How should the author structure a review?" asks a different question - so a person
+# talking about their own situation becomes "the asker", which claims nothing.
+# Any other self-reference becomes one more person, labelled like everyone else.
+#
+# The first attempt used "the asker", which the founder rejected on sight: it announces
+# that the question is about the person typing, which is exactly what this mechanism
+# exists to hide. "Person B thinks Person B's manager is unfair" is somebody else to the
+# model. The orchestrator chooses the letter so it follows the people Mechanism 1 has
+# already named; used on its own, this defaults to the first.
+DEFAULT_SELF_LABEL = "Person A"
+
 # Inside these, nothing is touched: this is the work being assessed.
-_QUOTED = re.compile(r'"[^"]*"', re.S)
+_QUOTED = re.compile(r'"[^"]*"|\u201c[^\u201d]*\u201d', re.S)
 _INDENTED = re.compile(r"(?:^[ \t]*(?:    |\t)\S[^\n]*\n?)+", re.M)
 
 # The gate. Without it this mechanism fires on any "I" at all, and "How should I
@@ -142,6 +154,9 @@ class Neutralisation:
     # handled by restore itself.
     restoration: dict[str, str] = field(default_factory=dict)
     framing: str = ""
+    # For restore(): which phrase stands for the asker, and what it becomes on the way
+    # back. Empty when nothing was changed.
+    asker: dict[str, str] = field(default_factory=dict)
 
 
 def protected_spans(prompt: str) -> list[Span]:
@@ -192,53 +207,183 @@ def _replacement_for(matched: str, prompt: str, start: int, *, pronoun: bool) ->
     return out
 
 
-def find_person_refs(prompt: str) -> tuple[list[PersonRef], str]:
-    """References to whoever wrote the thing, and which framing the prompt used.
+# First person to third, for the word that agrees with "I". Only a handful of English
+# verbs are irregular in the third person singular present; the rest follow spelling.
+_THIRD_IRREGULAR = {
+    "am": "is",
+    "are": "is",
+    "have": "has",
+    "do": "does",
+    "go": "goes",
+    "'m": " is",
+    "'re": " is",
+    "'ve": " has",
+}
+# Contractions hanging off "I" that would read wrongly after "the asker".
+_EXPAND = {"'ll": " will", "'d": " would"}
 
-    Returns an empty list when there is nothing to do, and never returns a reference
-    inside the work being assessed.
+
+def _third_person(word: str) -> str:
+    low = word.lower()
+    if low in _THIRD_IRREGULAR:
+        out = _THIRD_IRREGULAR[low]
+    elif low.endswith(("s", "x", "z", "ch", "sh", "o")):
+        out = word + "es"
+    elif len(low) > 1 and low.endswith("y") and low[-2] not in "aeiou":
+        out = word[:-1] + "ies"
+    else:
+        out = word + "s"
+    return out[0].upper() + out[1:] if word[:1].isupper() else out
+
+
+def _agreeing(subject) -> list:
+    """The finite verbs that agree with this "I", so they can move to the third person.
+
+    The first auxiliary when there is one ("I have been", "Do I", "I'm"), otherwise the
+    verb itself, plus any verb joined to it that has no subject of its own ("I think and
+    feel"). Past forms need no change and are never returned.
     """
-    protected = protected_spans(prompt)
+    head = subject.head
+    auxes = sorted(
+        (c for c in head.children if c.dep_ in ("aux", "auxpass") and c.tag_ == "VBP"),
+        key=lambda t: t.i,
+    )
+    if auxes:
+        return auxes[:1]
+    if head.tag_ != "VBP":
+        return []
+    found = [head]
+    # The parser often tags the joined verb as a bare "VB" ("I watch and wait"); joined to
+    # a present-tense verb with no subject of its own, it shares that verb's subject.
+    for conj in head.conjuncts:
+        if conj.tag_ in ("VBP", "VB") and not any(
+            c.dep_.startswith("nsubj") for c in conj.children
+        ):
+            found.append(conj)
+    return found
+
+
+def _first_person_refs(
+    prompt: str, protected: list[Span], referent: str, possessive: str
+) -> list[PersonRef] | None:
+    """Every I, me, my, mine and myself outside the work, with the grammar made to agree.
+
+    Returns None when the parser is unavailable: without it there is no reliable way to
+    make "I think" into "the asker thinks", and a prompt with broken grammar is worse
+    than one left in the first person.
+    """
+    from neutral.detect import _model
+
+    nlp = _model()
+    if nlp is None:
+        return None
+
+    doc = nlp(prompt)
     refs: list[PersonRef] = []
 
-    # No claim to have made the thing, nothing to neutralise. An ordinary question that
-    # happens to say "I" is not sycophancy bait.
-    if not claims_authorship(prompt, protected):
-        return [], ""
-
-    first = [m for m in _FIRST.finditer(prompt) if not _inside(m.start(), protected)]
-    colleague = [m for m in _COLLEAGUE.finditer(prompt) if not _inside(m.start(), protected)]
-
-    if not first and not colleague:
-        return [], ""
-
-    # Which way round the prompt is framed. Needed to put the answer back: an answer
-    # about "the author" means "you" to someone who said "I wrote this", and "your
-    # colleague" to someone who said a colleague did.
-    framing = "first_person" if len(first) >= len(colleague) else "third_person"
-
-    for match, kind in [(m, "first_person") for m in first] + [
-        (m, "stand_in_author") for m in colleague
-    ]:
-        matched = match.group(0)
+    def add(start: int, end: int, replacement: str, kind: str) -> None:
         refs.append(
             PersonRef(
-                span=Span(match.start(), match.end()),
-                text=matched,
-                replacement=_replacement_for(
-                    matched, prompt, match.start(), pronoun=kind == "first_person"
-                ),
+                span=Span(start, end),
+                text=prompt[start:end],
+                replacement=replacement,
                 kind=kind,
             )
         )
 
+    for token in doc:
+        low = token.lower_
+        if low not in ("i", "me", "my", "mine", "myself") or token.tag_ not in ("PRP", "PRP$"):
+            continue
+        if _inside(token.idx, protected):
+            continue
+        capital = _starts_sentence(prompt, token.idx)
+        start, end = token.idx, token.idx + len(token.text)
+
+        if low in ("my", "mine"):
+            add(start, end, _cased(possessive, capital), "first_person")
+        elif low == "me":
+            add(start, end, _cased(referent, capital), "first_person")
+        elif low == "myself":
+            if token.dep_ in ("dobj", "pobj", "dative", "attr"):
+                add(start, end, _cased(referent, capital), "first_person")
+            else:
+                # Emphatic ("I myself think"): it carries nothing, so it is removed with
+                # the space before it rather than doubled into "the asker the asker".
+                gap = len(prompt[:start]) - len(prompt[:start].rstrip())
+                add(start - gap, end, "", "first_person")
+        else:  # "I"
+            add(start, end, _cased(referent, capital), "first_person")
+            following = doc[token.i + 1] if token.i + 1 < len(doc) else None
+            if following is not None and not token.whitespace_ and following.lower_ in _EXPAND:
+                f_start = following.idx
+                add(f_start, f_start + len(following.text), _EXPAND[following.lower_], "agreement")
+            if token.dep_ in ("nsubj", "nsubjpass"):
+                for verb in _agreeing(token):
+                    if _inside(verb.idx, protected):
+                        continue
+                    v_start = verb.idx
+                    add(v_start, v_start + len(verb.text), _third_person(verb.text), "agreement")
+    return refs
+
+
+def find_person_refs(
+    prompt: str, self_label: str = DEFAULT_SELF_LABEL
+) -> tuple[list[PersonRef], str]:
+    """Every reference the asker makes to themselves, and which framing the prompt used.
+
+    Framings:
+      first_person  - the asker claims to have made the thing being judged; they become
+                      "the author", because that claim is what invites flattery
+      third_person  - a matched pair's other half: "a colleague wrote this"; also "the
+                      author", so the two halves converge
+      asker         - any other self-reference: "I think my manager is unfair to me"
+                      becomes "Person B thinks Person B's manager is unfair to Person B"
+
+    Never returns a reference inside the work being assessed.
+    """
+    protected = protected_spans(prompt)
+    authorship = claims_authorship(prompt, protected)
+    referent, possessive = (REFERENT, POSSESSIVE) if authorship else (self_label, f"{self_label}'s")
+
+    refs: list[PersonRef] = []
+    first = _first_person_refs(prompt, protected, referent, possessive)
+    if first is None:
+        # No parser: fall back to the narrow rule-based version, which only touches an
+        # explicit claim of authorship and handles its own few auxiliaries.
+        if not authorship:
+            return [], ""
+        first = [
+            PersonRef(
+                span=Span(m.start(), m.end()),
+                text=m.group(0),
+                replacement=_replacement_for(m.group(0), prompt, m.start(), pronoun=True),
+                kind="first_person",
+            )
+            for m in _FIRST.finditer(prompt)
+            if not _inside(m.start(), protected)
+        ]
+    refs.extend(first)
+
+    colleague = (
+        [m for m in _COLLEAGUE.finditer(prompt) if not _inside(m.start(), protected)]
+        if authorship
+        else []
+    )
+    for match in colleague:
+        refs.append(
+            PersonRef(
+                span=Span(match.start(), match.end()),
+                text=match.group(0),
+                replacement=_replacement_for(match.group(0), prompt, match.start(), pronoun=False),
+                kind="stand_in_author",
+            )
+        )
     # Pronouns only count once a stand-in author has been named, otherwise "they" in a
     # prompt about somebody else entirely would be swept up with it.
     if colleague:
         for match in _THEY.finditer(prompt):
             if _inside(match.start(), protected):
-                continue
-            if any(r.span.start == match.start() for r in refs):
                 continue
             refs.append(
                 PersonRef(
@@ -251,7 +396,16 @@ def find_person_refs(prompt: str) -> tuple[list[PersonRef], str]:
                 )
             )
 
-    refs.sort(key=lambda r: r.span.start)
+    if not refs:
+        return [], ""
+
+    firsts = sum(1 for r in refs if r.kind == "first_person")
+    if not authorship:
+        framing = "asker"
+    else:
+        framing = "first_person" if firsts >= len(colleague) else "third_person"
+
+    refs.sort(key=lambda r: (r.span.start, r.span.end))
     # Overlaps would produce segments that double-count characters of the original.
     kept: list[PersonRef] = []
     for ref in refs:
@@ -261,7 +415,12 @@ def find_person_refs(prompt: str) -> tuple[list[PersonRef], str]:
     return kept, framing
 
 
-def apply(prompt: str, refs: list[PersonRef], framing: str) -> Neutralisation:
+def apply(
+    prompt: str,
+    refs: list[PersonRef],
+    framing: str,
+    self_label: str = DEFAULT_SELF_LABEL,
+) -> Neutralisation:
     """Turn the framing third-person, leaving the work exactly as it was written."""
     if not refs:
         return Neutralisation(segments=(Segment(SegmentKind.COPY, Span(0, len(prompt)), prompt),))
@@ -283,12 +442,15 @@ def apply(prompt: str, refs: list[PersonRef], framing: str) -> Neutralisation:
                 source=ref.span,
                 policy=POLICY_NAME,
                 policy_version=POLICY_VERSION,
-                reason=(
-                    "first-person framing signals the asker wrote this, which the model "
-                    "treats more kindly"
-                    if ref.kind == "first_person"
-                    else "a stand-in author is the same signal in the other direction"
-                ),
+                reason={
+                    "first_person": (
+                        "first-person framing tells the model the question is about the "
+                        "asker's own work or situation, which it treats more kindly"
+                    ),
+                    "agreement": "the verb follows its subject into the third person",
+                    "stand_in_author": "a stand-in author is the same signal from the other side",
+                    "stand_in_pronoun": "a stand-in author is the same signal from the other side",
+                }.get(ref.kind, "part of the same change"),
             )
         )
         cursor = ref.span.end
@@ -296,19 +458,23 @@ def apply(prompt: str, refs: list[PersonRef], framing: str) -> Neutralisation:
         span = Span(cursor, len(prompt))
         segments.append(Segment(SegmentKind.COPY, span, span.text_in(prompt)))
 
-    # Longest key first is handled by restore(); both cases are registered because the
-    # model capitalises at the start of a sentence.
-    subject = "you" if framing == "first_person" else "your colleague"
-    owner = "your" if framing == "first_person" else "your colleague's"
+    # What the answer's "the author" or "Person B" becomes. Both cases are registered
+    # because the model capitalises "the author" at the start of a sentence.
+    referent, possessive = (
+        (self_label, f"{self_label}'s") if framing == "asker" else (REFERENT, POSSESSIVE)
+    )
+    subject = "your colleague" if framing == "third_person" else "you"
+    owner = "your colleague's" if framing == "third_person" else "your"
     restoration = {
-        POSSESSIVE: owner,
-        POSSESSIVE.capitalize(): owner.capitalize(),
-        REFERENT: subject,
-        REFERENT.capitalize(): subject.capitalize(),
+        possessive: owner,
+        possessive.capitalize(): owner.capitalize(),
+        referent: subject,
+        referent.capitalize(): subject.capitalize(),
     }
     return Neutralisation(
         segments=tuple(segments),
         transforms=tuple(transforms),
         restoration=restoration,
         framing=framing,
+        asker={"referent": referent, "possessive": possessive, "as": subject, "owner": owner},
     )

@@ -5,6 +5,45 @@ minds. Newest first.
 
 ---
 
+## 2026-09-27 — The person asking becomes somebody else, not "the asker"
+
+**The instruction.** Mechanism 3 was only firing when someone claimed to have written the
+thing being judged. The founder: every reference to oneself should become third person,
+and - after a first attempt used "the asker" - "you have to refer to yourself as if
+referring to someone else".
+
+**What was built.** Outside quoted or indented work, every I, me, my, mine and myself
+becomes a person label, the next letter after the people Mechanism 1 has named. With
+Priya already "Person A", the person asking is "Person B". The verbs are made to agree
+("I think" → "Person B thinks", "Do I" → "Does Person B", "I'm" → "Person B is"), using
+the same sentence parser that finds names. Claims of authorship still become "the
+author", because the eight authorship pairs in the dataset converge on it and the phrase
+is about the work, not the person.
+
+On the way back, "Person B" becomes "you", with the grammar turned round again ("Person B
+is" → "You are", "their manager" → "your manager"). A "them" that is the object of Person
+B's own verb stays as written, because it cannot be Person B - that would be "themselves".
+
+**Why "the asker" was wrong.** It announces that the sentence is about the person typing,
+which is the one thing the mechanism exists to hide. A label indistinguishable from the
+labels given to everyone else in the prompt does not.
+
+**What was given up.** "How should I structure a performance review?" used to go through
+untouched; it now becomes "How should Person A structure a performance review?". That is
+deliberate, and a test says so. When the parser is not available, a prompt without an
+authorship claim is left in the first person rather than sent with broken grammar (S4).
+
+**A bug it exposed.** Restoration used to count every entry in its map as a person, and
+only restored pronouns when there was exactly one. The asker's entries made every prompt
+look like it had two people, which quietly switched pronoun restoration off. The asker is
+now carried separately.
+
+**What would change our minds.** If measurement shows models still infer that "Person B"
+is the asker - see LIMITATIONS.md - a rewrite into a hypothetical ("someone thinks their
+manager…") would be the next thing to try.
+
+---
+
 ## 2026-09-26 — Mechanism 2 also moves who is the subject, by changing grammar, not roles
 
 **The instruction.** Order neutralisation is not only who is named first but "randomising

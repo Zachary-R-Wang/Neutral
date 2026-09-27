@@ -52,10 +52,20 @@ class TestTheThreadShowsTheAnswerTheUserCameFor:
         html, _ = rendered()
         assert "Assess Emily Carter." in html
 
-    def test_the_rewritten_prompt_is_never_shown(self):
-        """It is machinery. The thread is a conversation, not a debug view."""
+    def test_the_rewritten_prompt_is_not_in_the_thread(self):
+        """It is machinery. The thread is a conversation, not a debug view - so it is
+        only inside the collapsed control, never in the conversation itself."""
         html, _ = rendered()
-        assert "Assess Person A." not in html
+        thread = re.sub(r"<details.*?</details>", "", html, flags=re.S)
+        assert "Assess Person A." not in thread
+
+    def test_the_exact_prompt_sent_is_one_click_away(self):
+        """Phase 5: a person can see what Neutral did to their prompt. Without it the
+        founder could not tell that Mechanisms 2 and 3 were running."""
+        html, _ = rendered()
+        control = re.search(r'<details class="original">.*?</details>', html, re.S)
+        assert control and "What the model was sent" in control.group(0)
+        assert "Assess Person A." in control.group(0)
 
 
 class TestTheOriginalIsAlwaysOneClickAway:
@@ -123,11 +133,16 @@ class TestWhatChangedIsRecorded:
     def test_the_substitutions_are_listed(self):
         html, _ = rendered()
         assert "Emily Carter" in html and "Person A" in html
-        assert "Removed before sending" in html
+        assert "Changed before sending" in html
 
     def test_a_turn_with_no_changes_lists_none(self):
         html, _ = rendered("What is a good structure for a performance review?")
-        assert "Removed before sending" not in html
+        assert "Changed before sending" not in html
+
+    def test_each_mechanism_that_fired_is_named(self):
+        html, _ = rendered("Should I promote Priya Raman or Greg Miller? I manage both.")
+        for heading in ("Names", "Who is asking"):
+            assert f"<span>{heading}</span>" in html
 
 
 class TestTheOpeningState:
@@ -180,7 +195,7 @@ class TestFailuresStillShowTheRewriting:
         assert turn.failed
         assert turn.changes, "the rewriting is local and free; it should still be computed"
         html = page(conversation)
-        assert "What Neutral would have removed" in html
+        assert "What Neutral would have changed" in html
 
 
 class TestNothingUnescapedReachesThePage:
@@ -408,14 +423,14 @@ class TestNothingChangedMeansOneAnswer:
 
     def test_it_says_why_there_is_only_one_answer(self):
         conversation = Conversation()
-        turn = ask(conversation, "How should I structure a review?", self._Counting())
+        turn = ask(conversation, "What makes a good structure for a review?", self._Counting())
         assert turn.untouched
         assert "nothing in this needed changing" in turn.note.lower()
 
     def test_no_toggle_is_offered_when_there_is_nothing_to_show(self):
         conversation = Conversation()
-        ask(conversation, "How should I structure a review?", self._Counting())
-        assert "Before names were put back" not in page(conversation)
+        ask(conversation, "What makes a good structure for a review?", self._Counting())
+        assert "What Neutral changed" not in page(conversation)
 
     def test_a_prompt_with_a_name_also_makes_one_call(self):
         """Every turn costs one call. The expander shows the same reply, unrestored."""
@@ -424,7 +439,7 @@ class TestNothingChangedMeansOneAnswer:
         turn = ask(conversation, "Assess Emily Carter for promotion.", adapter)
         assert adapter.calls == 1
         assert turn.changes
-        assert "Before names were put back" in page(conversation)
+        assert "What Neutral changed" in page(conversation)
 
 
 class TestTheFooterSaysWhatIsActuallyRunning:

@@ -17,6 +17,18 @@ facts never move - but whether they matter is unknown.
 The subject swap is also narrow by design: about sixty verbs, simple sentences only. Most
 real sentences about two people fall outside it and are sent as written.
 
+## Talking about yourself in the third person is itself unusual
+
+Nobody writes "Should Person B tell Person B's manager?" about somebody else either. A
+model may still guess that Person B is the one asking, simply because the phrasing is
+odd. It no longer says so, which is the point, but a label is a weaker disguise than it
+looks. Whether this changes answers is unmeasured: the evaluation pairs that vary who is
+asking are the eight authorship pairs, and the change mostly affects prompts outside them.
+
+The grammar is made to agree by a sentence parser. When the parser is unavailable, a
+prompt that does not claim authorship is sent in the first person rather than risk "Person
+A think". A sentence the parser misreads can still come out wrong.
+
 ## Neutral protects some people better than others
 
 Its name detection finds African and East Asian names about 18 percentage points less
@@ -35,9 +47,9 @@ supported by the pipeline and costs money per prompt, which is why it is not the
 
 ## Age and seniority are not handled at all
 
-Mechanism 1 substitutes names. Mechanism 3 neutralises who wrote the thing being assessed.
-Neither touches "a new manager of three months" or "I am 58" — there is no name and no
-authorship claim, so nothing fires. On the evaluation dataset that is 18 of 70 pairs, a
+Mechanism 1 substitutes names. Mechanism 3 turns the person asking into a third party.
+Neither touches what is said about that person: "I am 58" becomes "Person A is 58", and
+the age is still there. On the evaluation dataset that is 18 of 70 pairs, a
 quarter of it, where Neutral does nothing whatsoever.
 
 CLAUDE.md §1 promises to reduce bias from "race, gender, age, nationality or seniority".

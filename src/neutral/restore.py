@@ -182,12 +182,183 @@ def _convert_by_recency(text: str, placeholders: list[str], table: dict[str, str
     return "".join(w + doc[i].whitespace_ for i, w in enumerate(words))
 
 
+# The asker comes back as "you". "The asker is right" must become "you are right", not
+# "you is right": the verb that agreed with "the asker" goes back to the plural form "you"
+# takes. "They" needs nothing - it already takes the same verbs as "you".
+_TO_YOU = {"is": "are", "was": "were", "has": "have", "does": "do", "'s": "'re"}
+_THEY_TO_YOU = {
+    "they": "you",
+    "them": "you",
+    "their": "your",
+    "theirs": "yours",
+    "themselves": "yourself",
+    "themself": "yourself",
+}
+
+
+def _replace_phrase(text: str, phrase: str, replacement: str) -> str:
+    """Case-aware: "The asker" becomes "You", "the asker" becomes "you"."""
+
+    def swap(m: re.Match) -> str:
+        return replacement[0].upper() + replacement[1:] if m.group(0)[0].isupper() else replacement
+
+    return re.sub(rf"\b{re.escape(phrase)}\b", swap, text, flags=re.I)
+
+
+def _restore_asker(text: str, asker: dict[str, str], placeholders: list[str]) -> str:
+    """Put the asker back as "you" (or "your colleague"), with the grammar that goes with it.
+
+    The asker arrives as a person label ("Person B") or as "the author". Either way it is
+    found by position, its verb is moved to agree with "you", and "they", "them" and
+    "their" become "you" and "your" when the asker is the most recent thing they could
+    refer to - the same recency rule used for named people.
+    """
+    referent, possessive = asker["referent"], asker["possessive"]
+    if asker["as"] != "you":
+        # A colleague stays in the third person, so no verb changes.
+        text = _replace_phrase(text, possessive, asker["owner"])
+        return _replace_phrase(text, referent, asker["as"])
+
+    from neutral.detect import _model
+
+    nlp = _model()
+    if nlp is None:
+        text = _replace_phrase(text, possessive, "your")
+        return _replace_phrase(text, referent, "you")
+
+    doc = nlp(text)
+    words = [t.text for t in doc]
+    spaces = [t.whitespace_ for t in doc]
+    person_spans = _placeholder_spans(text, placeholders)
+    # A label is matched exactly - "Person B", never "person b" in ordinary prose.
+    flags = 0 if referent.startswith("Person ") else re.I
+    found = [(m.start(), m.end()) for m in re.finditer(rf"\b{re.escape(referent)}\b", text, flags)]
+
+    asker_tokens: set[int] = set()
+    subjects = []
+    for start, end in found:
+        tokens = [t for t in doc if start <= t.idx < end]
+        if not tokens:
+            continue
+        first, last = tokens[0].i, tokens[-1].i
+        inside = {t.i for t in tokens}
+        head = next((t for t in tokens if t.head.i not in inside), tokens[-1])
+        owned = last + 1 < len(doc) and doc[last + 1].tag_ == "POS"
+        capital = first == 0 or bool(doc[first].is_sent_start) or _starts_a_line(text, start)
+        end_at = last + 1 if owned else last
+        if owned:
+            words[first] = "Your" if capital else "your"
+        else:
+            words[first] = "You" if capital else "you"
+        spaces[first] = spaces[end_at]
+        for i in range(first + 1, end_at + 1):
+            words[i] = spaces[i] = ""
+        asker_tokens |= set(range(first, end_at + 1))
+        if not owned and head.dep_ in ("nsubj", "nsubjpass"):
+            subjects.append(head)
+
+    for head in subjects:
+        _to_second_person(head, words)
+
+    last_asker = last_person = last_plural = -1
+    # The other people named so far in this sentence. With two of them, "their" may be
+    # the pair's: "Person A and Person B are strong, so Person B should compare their
+    # results" is not about the asker's results.
+    others: set[str] = set()
+    for token in doc:
+        i = token.i
+        low = token.lower_
+        if token.is_sent_start:
+            others = set()
+        if i in asker_tokens:
+            last_asker = i
+            continue
+        start, end = token.idx, token.idx + len(token.text)
+        span = next(((s, e) for s, e in person_spans if s <= start and end <= e), None)
+        if span:
+            last_person = i
+            others.add(text[span[0] : span[1]])
+            continue
+        if token.tag_ in ("NNS", "NNPS"):
+            last_plural = i
+            continue
+        if low in _THEY_TO_YOU and last_asker > max(last_person, last_plural):
+            if len(others) > 1 and low not in ("themselves", "themself"):
+                # Ambiguous between the asker and the group. Left as the model wrote it:
+                # a wrong "your" hands the asker something that belongs to other people.
+                continue
+            if low == "them" and _object_of_askers_own_clause(token, asker_tokens):
+                # "Person B should tell them" - an object pronoun cannot be the subject of
+                # its own clause; that would be "themselves". So "them" is somebody else,
+                # and is left for the named-person pass to resolve.
+                continue
+            words[i] = _match_case_word(token.text, _THEY_TO_YOU[low])
+
+    return "".join(w + spaces[i] for i, w in enumerate(words))
+
+
+def _starts_a_line(text: str, start: int) -> bool:
+    """Whether only a list marker or emphasis stands between this and the line's start.
+
+    The parser does not treat "- Person B should..." as a sentence start, which left a
+    lowercase "you" at the head of every bullet point.
+    """
+    prefix = text[text.rfind("\n", 0, start) + 1 : start]
+    return re.fullmatch(r"\s*(?:[-*+]|\d+[.)])?\s*(?:\*\*|__|\*|_)?", prefix) is not None
+
+
+def _object_of_askers_own_clause(pronoun, asker_tokens: set[int]) -> bool:
+    """Whether this pronoun sits in a clause whose subject is the asker."""
+    verb = pronoun.head
+    while verb.head is not verb and verb.pos_ not in ("VERB", "AUX"):
+        verb = verb.head
+    if verb.pos_ not in ("VERB", "AUX"):
+        return False
+    # A verb joined by "and", or one like "wants to tell them", has no subject of its own:
+    # it borrows the subject of the verb it hangs from. "Person B should raise it and tell
+    # them" - "tell" is still Person B's verb, so "them" is still somebody else.
+    while (
+        verb.dep_ in ("conj", "xcomp")
+        and not any(c.dep_ in ("nsubj", "nsubjpass") for c in verb.children)
+        and verb.head is not verb
+    ):
+        verb = verb.head
+    return any(c.dep_ in ("nsubj", "nsubjpass") and c.i in asker_tokens for c in verb.children)
+
+
+def _to_second_person(subject, words: list[str]) -> None:
+    """The verb that agreed with "the asker" agrees with "you" instead."""
+    head = subject.head
+    auxes = sorted(
+        (c for c in head.children if c.dep_ in ("aux", "auxpass") and c.tag_ in ("VBZ", "VBD")),
+        key=lambda t: t.i,
+    )
+    targets = auxes[:1] if auxes else [head]
+    targets += [
+        c for c in head.conjuncts if not any(k.dep_.startswith("nsubj") for k in c.children)
+    ]
+    for verb in targets:
+        low = verb.lower_
+        if low in _TO_YOU:
+            words[verb.i] = _match_case_word(verb.text, _TO_YOU[low])
+        elif verb.tag_ == "VBZ":
+            words[verb.i] = _match_case_word(verb.text, verb.lemma_)
+
+
 def restore(
     text: str,
     identity_map: dict[str, str],
     pronoun_style: dict[str, str] | None = None,
+    asker: dict[str, str] | None = None,
 ) -> str:
-    """Turn a model answer about placeholders back into one about real people."""
+    """Turn a model answer about placeholders back into one about real people.
+
+    `identity_map` holds people only. The asker is passed separately: counting "the
+    asker" as a person once switched off pronoun restoration for a single named colleague,
+    because two entries looked like two people.
+    """
+    if asker:
+        text = _restore_asker(text, asker, list(identity_map))
     restored = text
 
     # Longest placeholder first, so "Person A" is not half-replaced by a shorter key.

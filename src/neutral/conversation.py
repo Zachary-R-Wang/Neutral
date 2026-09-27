@@ -60,6 +60,9 @@ class Turn:
     # Only set when the prompt went to the model untouched, in which case it is the same
     # text as `answer` and there is nothing to compare.
     original_answer: str = ""
+    # Word for word what the model received for this turn, so the person can see what
+    # Neutral did to their prompt (CLAUDE.md §5, Phase 5). In memory only, like `asked`.
+    sent: str = ""
     changes: tuple[TransformRecord, ...] = ()
     untouched: bool = False
     note: str = ""
@@ -76,7 +79,9 @@ class Conversation:
         return bool(self.turns)
 
 
-def _rewrite_all(prompts: list[str]) -> tuple[list[str], dict[str, str], dict[str, str], tuple]:
+def _rewrite_all(
+    prompts: list[str],
+) -> tuple[list[str], dict[str, str], dict[str, str], tuple, dict[str, str]]:
     """Rewrite every turn in one pass, so the placeholders agree across all of them.
 
     Goes through neutral.rewrite, which is the same orchestrator the evaluation harness
@@ -88,7 +93,7 @@ def _rewrite_all(prompts: list[str]) -> tuple[list[str], dict[str, str], dict[st
     done = rewrite(joined)
 
     if not done.changed:
-        return list(prompts), {}, {}, ()
+        return list(prompts), {}, {}, (), {}
 
     parts = done.processed.split(SEPARATOR)
     if len(parts) != len(prompts):
@@ -103,7 +108,7 @@ def _rewrite_all(prompts: list[str]) -> tuple[list[str], dict[str, str], dict[st
     # Only the final turn's changes are new; the rest were recorded when they were asked.
     last_start = len(SEPARATOR.join(prompts[:-1])) + (len(SEPARATOR) if len(prompts) > 1 else 0)
     newest = tuple(r for r in done.transforms if r.source and r.source.start >= last_start)
-    return parts, done.restore_map, done.pronoun_style, newest
+    return parts, done.identity_map, done.pronoun_style, newest, done.asker
 
 
 def ask(conversation: Conversation, prompt: str, adapter) -> Turn:
@@ -142,7 +147,7 @@ def ask(conversation: Conversation, prompt: str, adapter) -> Turn:
         return send_unchanged(hold.reason)
 
     try:
-        rewritten, identity_map, pronoun_style, changes = _rewrite_all(prompts)
+        rewritten, identity_map, pronoun_style, changes, asker = _rewrite_all(prompts)
     except (InvariantViolation, Exception):  # noqa: BLE001 - fail open to the original
         return send_unchanged(
             "The rewritten prompt could not be proved faithful to what you wrote, so it "
@@ -174,6 +179,7 @@ def ask(conversation: Conversation, prompt: str, adapter) -> Turn:
         # the actual reason stops being invisible to whoever has to fix it.
         print(f"[model] {processed.error_kind or 'error'}: {processed.error}")
         turn.note = errors.user_message(processed.error_kind or errors.BAD_REQUEST)
+        turn.sent = rewritten[-1]
         turn.changes = changes
         conversation.turns.append(turn)
         return turn
@@ -189,7 +195,8 @@ def ask(conversation: Conversation, prompt: str, adapter) -> Turn:
         return turn
 
     turn.neutral_answer = processed.text
-    turn.answer = restore(processed.text, identity_map, pronoun_style)
+    turn.answer = restore(processed.text, identity_map, pronoun_style, asker)
+    turn.sent = rewritten[-1]
     turn.changes = changes
     conversation.turns.append(turn)
     # identity_map is a local. It goes out of scope here, as S5 requires.

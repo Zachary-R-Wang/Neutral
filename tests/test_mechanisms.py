@@ -8,6 +8,8 @@ would hand the model a document nobody wrote and judge the user on it.
 
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from neutral.core import SegmentKind
@@ -66,16 +68,21 @@ class TestTheWorkBeingAssessedIsNeverEdited:
 
 
 class TestItOnlyFiresOnAnActualAuthorshipClaim:
-    def test_an_ordinary_question_with_i_in_it_is_untouched(self):
-        assert not rewrite("How should I structure a performance review?").changed
+    def test_an_ordinary_i_becomes_a_person_not_the_author(self):
+        """Without a claim to have written something, "the author" would invent one.
+
+        This used to assert the question was left untouched. The founder overruled that on
+        2026-09-27: every self-reference is neutralised, as somebody else.
+        """
+        out = _text("How should I structure a performance review?")
+        assert out == "How should Person A structure a performance review?"
 
     def test_my_report_means_a_person_not_a_document(self):
-        """In HR "my report" is nearly always somebody, and mangling that is worse."""
-        for prompt in (
-            "What should I say to my report about their promotion?",
-            "My report thinks they are ready for a step up.",
-        ):
-            assert not rewrite(prompt).changed, prompt
+        """In HR "my report" is nearly always somebody. It must not read as a claim to have
+        written a report - which would make it "the author's report"."""
+        out = _text("What should I say to my report about their promotion?")
+        assert "author" not in out
+        assert out == "What should Person A say to Person A's report about their promotion?"
 
     def test_a_claim_to_have_written_something_does_fire(self):
         for prompt in (
@@ -384,3 +391,124 @@ class TestWhoIsTheSubject:
         from neutral.web.page import footer_note
 
         assert "who is the subject" in footer_note()
+
+
+# ---------------------------------------------------------------------------
+# Mechanism 3: every self-reference, as somebody else
+# ---------------------------------------------------------------------------
+
+
+class TestTheAskerIsSomebodyElse:
+    """The founder's rule, 2026-09-27: "you have to refer to yourself as if referring to
+    someone else". A first attempt said "the asker", which announces that the question is
+    about the person typing - the one thing this is meant to hide."""
+
+    EVERYDAY = [
+        "I think my manager Priya Raman is being unfair to me. What should I do?",
+        "I'm a new manager and my report thinks they're ready for promotion. What do I say?",
+        "My colleague Greg Miller keeps interrupting me in meetings. How do I handle it?",
+        "Am I overreacting? I have been here two years and I don't get feedback.",
+        "I'll be managing the team, and I'd like advice. Do I tell them now?",
+    ]
+
+    @pytest.mark.parametrize("asked", EVERYDAY)
+    def test_nothing_reaching_the_model_says_it_is_about_the_person_asking(self, asked):
+        sent = _text(asked)
+        lowered = f" {sent.lower()} "
+        for giveaway in ("asker", "the user", "yourself", " you "):
+            assert giveaway not in lowered, f"{giveaway!r} in {sent!r}"
+        for word in re.findall(r"[A-Za-z']+", sent):
+            assert word.lower() not in ("i", "me", "my", "mine", "myself", "i'm", "i've"), sent
+
+    def test_the_asker_is_labelled_after_the_people_already_named(self):
+        sent = _text("I think my manager Priya Raman is being unfair to me.")
+        assert sent == "Person B thinks Person B's manager Person A is being unfair to Person B."
+
+    @pytest.mark.parametrize(
+        ("asked", "sent"),
+        [
+            ("I think it is fine.", "Person A thinks it is fine."),
+            ("Do I tell them now?", "Does Person A tell them now?"),
+            ("Am I overreacting?", "Is Person A overreacting?"),
+            ("I have been here two years.", "Person A has been here two years."),
+            ("I don't get feedback.", "Person A doesn't get feedback."),
+            ("I'm a new manager.", "Person A is a new manager."),
+            ("I'll decide today.", "Person A will decide today."),
+            ("I watch and wait.", "Person A watches and waits."),
+        ],
+    )
+    def test_the_grammar_follows_into_the_third_person(self, asked, sent):
+        assert _text(asked) == sent
+
+    def test_quoted_work_is_still_untouched(self):
+        assert "I am writing to express my strong interest" in _text(COVER_LETTER)
+
+    def test_it_is_logged_with_a_reason(self):
+        done = rewrite("I think my manager is unfair to me.")
+        kinds = {t.detected_kind for t in done.transforms}
+        assert "first_person" in kinds and "agreement" in kinds
+        assert all(t.reason for t in done.transforms)
+
+
+class TestTheAnswerComesBackAddressedToYou:
+    ASKED = "I think my manager Priya Raman is being unfair to me. What should I do?"
+
+    def _back(self, answer: str, asked: str | None = None) -> str:
+        from neutral.restore import restore
+
+        done = rewrite(asked or self.ASKED)
+        return restore(answer, done.identity_map, done.pronoun_style, done.asker)
+
+    @pytest.mark.parametrize(
+        ("model", "you"),
+        [
+            ("Person B is right to be frustrated.", "You are right to be frustrated."),
+            ("Person B needs to keep notes.", "You need to keep notes."),
+            ("Is Person B overreacting?", "Are you overreacting?"),
+            ("Person B has been patient.", "You have been patient."),
+            ("Person B doesn't need permission.", "You don't need permission."),
+            ("Person B's notes will help.", "Your notes will help."),
+            ("Person B should look after themselves.", "You should look after yourself."),
+            ("Person B should talk to their manager.", "You should talk to your manager."),
+        ],
+    )
+    def test_the_asker_comes_back_as_you(self, model, you):
+        assert self._back(model) == you
+
+    def test_them_in_the_askers_own_clause_is_somebody_else(self):
+        """ "Person B should tell them" - "them" cannot be Person B; that would be
+        "themselves". It is left as it is rather than turned into "tell you"."""
+        back = self._back("Person B should raise it with HR and tell them the dates.")
+        assert back == "You should raise it with HR and tell them the dates."
+
+    def test_you_is_capitalised_at_the_start_of_a_bullet(self):
+        back = self._back("Steps:\n\n- Person B should keep notes.\n1. **Person B's** notes help.")
+        assert back == "Steps:\n\n- You should keep notes.\n1. **Your** notes help."
+
+    def test_their_after_two_other_people_is_not_given_to_the_asker(self):
+        """Found by looking at the page: "compare their results" became "your results"."""
+        asked = "Should I promote Priya Raman or Greg Miller? I manage both."
+        back = self._back(
+            "Person A and Person B are strong, so Person C should compare their results.",
+            asked,
+        )
+        assert back == (
+            "Priya Raman and Greg Miller are strong, so you should compare their results."
+        )
+
+    def test_a_reflexive_still_comes_back_as_yourself(self):
+        asked = "Should I promote Priya Raman or Greg Miller? I manage both."
+        back = self._back(
+            "Person A and Person B rely on Person C, who must pace themselves.", asked
+        )
+        assert back == "Priya Raman and Greg Miller rely on you, who must pace yourself."
+
+    def test_the_named_person_is_restored_by_name(self):
+        back = self._back("Person A may not realise it. Person B should say so.")
+        assert back == "Priya Raman may not realise it. You should say so."
+
+    def test_a_named_persons_pronouns_still_come_back(self):
+        """The asker used to be counted as a second person, which switched this off."""
+        asked = "I think my manager Priya Raman is unfair. She ignores me."
+        back = self._back("Person B should talk to Person A. They may not realise it.", asked)
+        assert back == "You should talk to Priya Raman. She may not realise it."
