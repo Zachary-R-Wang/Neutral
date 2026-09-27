@@ -5,6 +5,58 @@ minds. Newest first.
 
 ---
 
+## 2026-09-27 — OPEN: a decision model (Laya) as the relevance gate
+
+**Status: proposed, waiting for the founder.** CLAUDE.md §4 and §10: a dependency that
+changes the architecture is written up here first, and not added until approved.
+
+**The instruction.** "Use a decision model like Laya to predict biases and send to model
+instead."
+
+**What Laya is.** An open model (Apache 2.0, from Convai Innovations) that does not write
+text. It is given a document and typed questions, and returns only numbers: a
+probability for a yes/no question, or a choice from a short list. About 421 million
+parameters, an 808 MB download, runs on PyTorch, about 0.2-0.5 seconds per request on an
+ordinary processor, and reads at most 512 tokens (roughly 380 words).
+
+**Where it fits.** Stage 2 of the pipeline, "decide", which today is a placeholder: every
+name is substituted and nothing is judged relevant or irrelevant. Laya would answer, for
+each thing detected: *is this person's name, age, seniority or gender needed to answer
+this question?* If not, the mechanisms remove it; if so, it stays. It would not do the
+rewriting itself. That split is what makes it attractive: a model that can only output
+numbers cannot put a word into the prompt, so S1 stays provable.
+
+It would also reach the gap LIMITATIONS.md leads with. Stated age and seniority - "I am
+58", "a new manager" - are 18 of the 70 evaluation pairs, and Neutral does nothing to
+them today because deleting them blindly would break questions where they matter.
+Deciding when they matter is exactly the question a decision model answers.
+
+**What it cannot do.** It cannot predict how Claude or GPT will be biased. It has never
+seen them. It can only judge whether something in the prompt is relevant to the task;
+whether the connected model would have been swayed by it is what `make eval` measures.
+Learning to predict that would need far more measurements than seventy pairs.
+
+It is never asked whether identity matters for *safety*. S3 is explicit: for that
+question the answer is always "keep it", and the rule-based safety hold runs first and
+is not replaced.
+
+**The risks, stated before measuring.**
+- Out of the box it is near chance on its own benchmark of typed decisions (0.36; 0.77
+  after fine-tuning). It will probably need training on labelled examples Neutral does
+  not yet have.
+- The server has 1 GB of memory, 385 MB of which is already the language model that finds
+  names. Laya needs a machine with 2-4 GB, which costs more per month.
+- 512 tokens is shorter than a long performance review. Anything longer would have to be
+  judged in pieces, or passed through untouched.
+
+**Proposed order.** Measure before building in. Run it, unchanged, against a labelled set
+of prompts where identity is and is not relevant - the Phase 2 set, which has to exist
+anyway - next to the fixed-prompt judge that CLAUDE.md's Phase 2 names. Adopt whichever
+is more accurate on that set, and record both numbers here. If neither is good enough,
+that is the finding.
+
+---
+
 ## 2026-09-27 — The person asking becomes somebody else, not "the asker"
 
 **The instruction.** Mechanism 3 was only firing when someone claimed to have written the
