@@ -177,6 +177,14 @@ def rewrite(
         # Mechanism 1 has named and must not ask it.
         self_label = f"Person {string.ascii_uppercase[len(substitution.identity_map)]}"
         refs, framing = person_neutralisation.find_person_refs(prompt, self_label)
+        # "questions to ask as a philosopher": the asker, described without an "I".
+        roles = person_neutralisation.find_asker_roles(prompt)
+        if roles:
+            labelled = bool(refs) and framing == "asker"
+            segments, moved = person_neutralisation.apply_asker_roles(
+                prompt, segments, roles, self_label if labelled else None
+            )
+            transforms.extend(moved)
         if refs:
             segments, used = _splice(segments, refs, prompt)
             if used:

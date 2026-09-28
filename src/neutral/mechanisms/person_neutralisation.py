@@ -500,3 +500,271 @@ def apply(
         framing=framing,
         asker={"referent": referent, "possessive": possessive, "as": subject, "owner": owner},
     )
+
+
+# --------------------------------------------------------------------------------------
+# "as a philosopher": the person asking, described without an "I"
+# --------------------------------------------------------------------------------------
+#
+# "20 best questions to ask as a philosopher to a model" says who is asking as plainly as
+# "I am a philosopher", and there is no "I" for the rules above to find. Found by the
+# founder on 2026-09-28, after descriptions of other people had been dealt with.
+#
+# The role is what shapes the task, so it is kept, but it stops being the asker's:
+#   a discipline that only sets the kind of question becomes the kind of question
+#       "questions to ask as a philosopher"  -> "philosophical questions to ask"
+#   anything else becomes somebody else
+#       "tips to negotiate as a woman in tech" -> "tips for a woman in tech to negotiate"
+#       "how to give feedback as a new manager" -> "how a new manager should give feedback"
+# When the prompt also says "I" or "my", that person already has a label, and the label
+# is used: "what Person A should say as a junior engineer when Person A's lead is wrong".
+#
+# Every word in the result comes from the original: the role is moved, not written, and
+# only "for", "should" and the adjective stand in for words that were there ("as", "to",
+# the role itself).
+
+DISCIPLINES = {
+    "philosopher": "philosophical",
+    "psychologist": "psychological",
+    "historian": "historical",
+    "economist": "economic",
+    "sociologist": "sociological",
+    "scientist": "scientific",
+    "ethicist": "ethical",
+    "theologian": "theological",
+    "anthropologist": "anthropological",
+    "linguist": "linguistic",
+    "journalist": "journalistic",
+    "lawyer": "legal",
+    "doctor": "medical",
+    "physician": "medical",
+    "mathematician": "mathematical",
+    "biologist": "biological",
+    "technologist": "technical",
+}
+_QUESTION_NOUNS = {"question", "topic", "prompt"}
+ROLE_KIND = "asker_role"
+
+
+@dataclass(frozen=True)
+class AskerRole:
+    phrase: Span  # "as a philosopher", from "as" to the end of the role
+    role_span: Span  # "a philosopher"
+    role_noun: Span  # "philosopher"
+    to: Span  # the "to" of the infinitive
+    shape: str  # "noun" ("questions to ask") or "wh" ("how to give")
+    head_noun: Span | None  # "questions", for shape "noun"
+    head_lemma: str
+    drop_to: Span | None  # "to " in "ask ... to a model", which "ask" does not take
+
+
+def find_asker_roles(prompt: str, protected: list[Span] | None = None) -> list[AskerRole]:
+    """Every "as a <role>" that describes the person asking, in a request with no "I"."""
+    from neutral.detect import _model
+    from neutral.detect_attributes import _is_person
+
+    nlp = _model()
+    if nlp is None:
+        return []
+    protected = protected or []
+    doc = nlp(prompt)
+    found: list[AskerRole] = []
+    for as_ in doc:
+        if as_.lower_ != "as" or as_.dep_ != "prep" or _inside(as_.idx, protected):
+            continue
+        verb = as_.head
+        if verb.pos_ == "NOUN" and verb.dep_ == "dobj":
+            # "how to handle microaggressions as a Black woman": the parser hangs the role
+            # on the object; it belongs to the verb.
+            verb = verb.head
+        if verb.tag_ != "VB" or any(c.dep_.startswith("nsubj") for c in verb.children):
+            continue
+        to = [c for c in verb.children if c.dep_ == "aux" and c.tag_ == "TO"]
+        roles = [c for c in as_.children if c.dep_ == "pobj" and c.pos_ == "NOUN"]
+        if not to or not roles:
+            continue
+        noun = roles[0]
+        det = [c for c in noun.lefts if c.dep_ == "det" and c.lower_ in ("a", "an")]
+        if not det or not _is_person(noun):
+            continue  # "as a result", "as an example", "as a team"
+
+        end = noun.idx + len(noun.text)
+        drop_to = None
+        for right in noun.rights:
+            if right.dep_ == "prep" and right.lower_ == "to":
+                # "ask as a philosopher to a model": "to a model" is the verb's, whatever
+                # the parser says, and is not part of the role.
+                if verb.lemma_ in ("ask", "pose", "put"):
+                    drop_to = Span(right.idx, right.idx + len(right.text) + 1)
+                break
+            end = max(end, max(t.idx + len(t.text) for t in right.subtree))
+
+        if verb.dep_ in ("relcl", "acl") and verb.head.pos_ == "NOUN" and verb.head.i < verb.i:
+            shape, head = "noun", verb.head
+        elif any(t.tag_ in ("WRB", "WP") and t.i < to[0].i for t in verb.subtree):
+            shape, head = "wh", None
+        else:
+            continue
+        found.append(
+            AskerRole(
+                phrase=Span(as_.idx, end),
+                role_span=Span(det[0].idx, end),
+                role_noun=Span(noun.idx, noun.idx + len(noun.text)),
+                to=Span(to[0].idx, to[0].idx + len(to[0].text)),
+                shape=shape,
+                head_noun=Span(head.idx, head.idx + len(head.text)) if head is not None else None,
+                head_lemma=head.lemma_.lower() if head is not None else "",
+                drop_to=drop_to,
+            )
+        )
+    return found
+
+
+def _cut(segments, original: str, points: list[int]) -> list[Segment]:
+    """Split untouched segments at these offsets, so each piece can be moved on its own."""
+    out: list[Segment] = []
+    for s in segments:
+        if s.kind is not SegmentKind.COPY or s.source is None:
+            out.append(s)
+            continue
+        start = s.source.start
+        for p in sorted(p for p in set(points) if s.source.start < p < s.source.end):
+            out.append(Segment(SegmentKind.COPY, Span(start, p), original[start:p]))
+            start = p
+        out.append(
+            Segment(SegmentKind.COPY, Span(start, s.source.end), original[start : s.source.end])
+        )
+    return out
+
+
+def _within(segment: Segment, span: Span) -> bool:
+    return (
+        segment.source is not None
+        and span.start <= segment.source.start
+        and (segment.source.end <= span.end)
+    )
+
+
+def apply_asker_roles(
+    original: str, segments, roles: list[AskerRole], label: str | None
+) -> tuple[tuple[Segment, ...], list[TransformRecord]]:
+    """Move each role off the person asking. `label` is the asker's, if they have one."""
+    segments = list(segments)
+    transforms: list[TransformRecord] = []
+    for role in roles:
+        gap_after = original[role.phrase.end : role.phrase.end + 1] == " "
+        gap_before = original[role.phrase.start - 1 : role.phrase.start] == " "
+        points = [
+            role.phrase.start,
+            role.phrase.end,
+            role.role_span.start,
+            role.to.start,
+            role.to.end,
+        ]
+        if gap_after:
+            points.append(role.phrase.end + 1)
+        if gap_before:
+            points.append(role.phrase.start - 1)
+        if role.head_noun:
+            points.append(role.head_noun.start)
+        if role.drop_to:
+            points += [role.drop_to.start, role.drop_to.end]
+        segments = _cut(segments, original, points)
+
+        # Anything inside the phrase that a mechanism has already changed stays changed.
+        role_segments = [s for s in segments if _within(s, role.role_span)]
+        rendered_role = "".join(s.text for s in role_segments).strip()
+        # "as a 45-year-old" with the age removed leaves "a": nobody is left to move.
+        if not re.sub(r"^(?:an?|the)\b", "", rendered_role, flags=re.I).strip():
+            rendered_role = ""
+        role_word = original[role.role_noun.start : role.role_noun.end].lower()
+        adjective = DISCIPLINES.get(role_word)
+
+        # The whole phrase and one space beside it leave their place, in every case but
+        # the one where a label already stands for the asker and the role can stay put.
+        removed = Span(
+            role.phrase.start - (1 if gap_before and not gap_after else 0),
+            role.phrase.end + (1 if gap_after else 0),
+        )
+        before_to: list[Segment] = []
+        to_text = None
+        head_prefix = None
+        if label:
+            if role.shape == "noun":
+                to_text = f"for {label} to"
+            else:
+                to_text = f"{label} should"
+            removed = None
+        elif role.shape == "noun" and adjective and role.head_lemma in _QUESTION_NOUNS:
+            head_prefix = f"{adjective} "
+        elif role.shape == "noun":
+            before_to = [
+                Segment(
+                    SegmentKind.REPLACE,
+                    Span(role.phrase.start, role.phrase.start + 2),
+                    "for ",
+                    NAME,
+                ),
+                *role_segments,
+                Segment(SegmentKind.REPLACE, Span(removed.end - 1, removed.end), " ", NAME),
+            ]
+        else:
+            before_to = [
+                *role_segments,
+                Segment(SegmentKind.REPLACE, Span(removed.start, removed.start + 1), " ", NAME),
+            ]
+            to_text = "should"
+        if not rendered_role:
+            # Every word of the role was a description the task did not need: there is
+            # nobody left to move, so the phrase simply goes.
+            before_to, to_text, head_prefix = [], None, None
+
+        out: list[Segment] = []
+        for s in segments:
+            if removed and _within(s, removed):
+                continue
+            if role.drop_to and not label and _within(s, role.drop_to):
+                continue
+            if (
+                role.head_noun
+                and head_prefix
+                and s.source == Span(role.head_noun.start, s.source.end)
+                and s.source.start == role.head_noun.start
+            ):
+                out.append(Segment(SegmentKind.REPLACE, role.role_noun, head_prefix, NAME))
+            if (
+                s.source is not None
+                and s.source.start == role.to.start
+                and s.kind is SegmentKind.COPY
+            ):
+                out.extend(before_to)
+                if to_text:
+                    out.append(Segment(SegmentKind.REPLACE, role.to, to_text, NAME))
+                    continue
+            out.append(s)
+        new_text = "".join(s.text for s in out)
+        if new_text == "".join(s.text for s in segments):
+            continue
+        segments = out
+        transforms.append(
+            TransformRecord(
+                mechanism=NAME,
+                detected=original[role.phrase.start : role.phrase.end],
+                detected_kind=ROLE_KIND,
+                replacement=(
+                    head_prefix.strip()
+                    if head_prefix
+                    else (to_text or "")
+                    if label
+                    else f"{rendered_role} (moved)"
+                ),
+                source=role.phrase,
+                policy=POLICY_NAME,
+                policy_version=POLICY_VERSION,
+                reason=(
+                    "a description of the person asking: the role is kept for the task, "
+                    "but no longer belongs to whoever is typing"
+                ),
+            )
+        )
+    return tuple(segments), transforms

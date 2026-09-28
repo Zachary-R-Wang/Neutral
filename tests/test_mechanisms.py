@@ -575,10 +575,8 @@ class TestDescriptionsAreTakenOut:
         ("asked", "sent"),
         [
             (
-                "20 best questions to ask as a philosopher to an 18 year old model and "
-                "lifestyle content creator in an interview",
-                "20 best questions to ask as a philosopher to a model and lifestyle content "
-                "creator in an interview",
+                "Is a 58-year-old warehouse supervisor a good fit?",
+                "Is a warehouse supervisor a good fit?",
             ),
             (
                 "Is a Nigerian software engineer with 6 years of experience a good fit?",
@@ -682,3 +680,70 @@ class TestEverydayPromptsAreChanged:
         assert changed.passed >= 20, f"only {changed.passed}/{changed.total} changed"
         assert removed.passed >= 28, f"only {removed.passed}/{removed.total} removed"
         assert kept.passed >= 42, f"only {kept.passed}/{kept.total} kept"
+
+
+class TestTheAskerDescribedWithoutAnI:
+    """The founder, 2026-09-28, on "20 best questions to ask as a philosopher to an 18 year
+    old model...": removing the age was not enough. "as a philosopher" is the person
+    asking, as plainly as "I am a philosopher"."""
+
+    def test_the_founders_example(self):
+        out = _text(
+            "20 best questions to ask as a philosopher to an 18 year old model and "
+            "lifestyle content creator in an interview"
+        )
+        assert out == (
+            "20 best philosophical questions to ask a model and lifestyle content creator "
+            "in an interview"
+        )
+
+    @pytest.mark.parametrize(
+        ("asked", "sent"),
+        [
+            ("Questions to ask as an interviewer", "Questions for an interviewer to ask"),
+            ("How to give feedback as a new manager?", "How a new manager should give feedback?"),
+            (
+                "Things to know as a first-time founder raising money",
+                "Things for a first-time founder raising money to know",
+            ),
+            (
+                "What to say as a junior engineer when my lead is wrong",
+                "What Person A should say as a junior engineer when Person A's lead is wrong",
+            ),
+            (
+                "How to handle microaggressions as a Black woman at work",
+                "How a Black woman should handle microaggressions at work",
+            ),
+            ("Tips to negotiate as a 45-year-old", "Tips to negotiate"),
+        ],
+    )
+    def test_the_role_stops_being_the_askers(self, asked, sent):
+        assert _text(asked) == sent
+
+    @pytest.mark.parametrize(
+        "untouched",
+        ["Write a poem as a pirate.", "Ways to respond as a result of the change."],
+    )
+    def test_role_play_and_ordinary_as_are_left_alone(self, untouched):
+        assert _text(untouched) == untouched
+
+    def test_it_is_logged(self):
+        done = rewrite("Questions to ask as an interviewer")
+        moved = [t for t in done.transforms if t.detected_kind == "asker_role"]
+        assert moved and moved[0].detected == "as an interviewer" and moved[0].reason
+
+
+class TestAnAgeThatIsThePerson:
+    @pytest.mark.parametrize(
+        ("asked", "sent"),
+        [
+            ("A 45-year-old applied for the role.", "A person applied for the role."),
+            (
+                "Hire a 58-year-old with ten years of experience?",
+                "Hire a person with ten years of experience?",
+            ),
+            ("Write a review for a 58-year-old engineer.", "Write a review for an engineer."),
+        ],
+    )
+    def test_the_sentence_keeps_its_subject(self, asked, sent):
+        assert _text(asked) == sent

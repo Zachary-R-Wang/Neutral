@@ -183,6 +183,29 @@ def _takes_an(word: str) -> bool:
     return low[:1] in "aeiou"
 
 
+def _stands_for_the_person(prompt: str, finding: Finding) -> bool:
+    """Whether an age is the noun itself ("a 45-year-old applied"), not a word about one
+    ("a 45-year-old engineer"). Only the "-year-old" and "-something" forms can be, and
+    only the parser can tell "applied" from "engineer" after them."""
+    from neutral.detect import _model
+
+    if not re.search(r"old$|something$", finding.text, re.I):
+        return False
+    if not re.search(r"\ban?\s+$", prompt[: finding.span.start], re.I):
+        return False
+    nlp = _model()
+    if nlp is None:
+        return False
+    doc = nlp(prompt)
+    last = next(
+        (t for t in doc if t.idx < finding.span.end <= t.idx + len(t.text)),
+        None,
+    )
+    if last is None:
+        return False
+    return not (last.dep_ in ("amod", "compound", "nmod") and last.head.pos_ in ("NOUN", "PROPN"))
+
+
 def _attribute_edits(prompt: str, findings: list[Finding], allowed: set[int]) -> list[_Edit]:
     """Descriptions of a person, taken out or made neutral, with "a"/"an" put right.
 
@@ -213,6 +236,16 @@ def _attribute_edits(prompt: str, findings: list[Finding], allowed: set[int]) ->
             )
             continue
         start, end = finding.span.start, finding.span.end
+        if finding.kind == "age" and _stands_for_the_person(prompt, finding):
+            # "as a 45-year-old" or "a 45-year-old applied": the age is the person, not a
+            # word about them. After "as a", the whole phrase goes; elsewhere it becomes
+            # "person", so the sentence keeps its subject.
+            lead = re.search(r"\s*\b(?:as|like)\s+an?\s+$", prompt[:start], re.I)
+            if lead:
+                edits.append(_Edit(Span(lead.start(), end), "", finding.text, finding.kind, reason))
+            else:
+                edits.append(_Edit(finding.span, "person", finding.text, finding.kind, reason))
+            continue
         if finding.text[:1] == "," and prompt[end : end + 1] == ",":
             end += 1  # "a lead, aged 26, objected" - both commas go
         if finding.text[:1] not in ", (" and not finding.text[:1].isspace():

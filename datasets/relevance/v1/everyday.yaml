@@ -14,10 +14,14 @@
 set: everyday
 items:
   - id: day-001
-    why: the founder's example - the age is not what makes a good interview question
+    why: the founder's example - neither the age nor who is asking makes a good interview question
     prompt: 20 best questions to ask as a philosopher to an 18 year old model and lifestyle content creator in an interview
-    remove: [18 year old]
-    keep: [philosopher, model and lifestyle content creator]
+    # Relabelled 2026-09-28, after the first results, on the founder's correction: "as a
+    # philosopher" is the person asking describing themselves, which Mechanism 3 exists
+    # to remove. It was first labelled `keep: [philosopher]`. What the task needs from it
+    # is the kind of question, so that is what must survive.
+    remove: [18 year old, as a philosopher]
+    keep: [philosophical, model and lifestyle content creator]
   - id: day-002
     why: the review is about the work
     prompt: Write a performance review for a 58-year-old warehouse supervisor who missed two deadlines but trained three new hires.
