@@ -17,6 +17,17 @@ facts never move - but whether they matter is unknown.
 The subject swap is also narrow by design: about sixty verbs, simple sentences only. Most
 real sentences about two people fall outside it and are sent as written.
 
+## Whether a request asks for a verdict is decided by words
+
+Removing what the person asking says about their own stake, and turning "Is my X
+good?" into "Evaluate X", happens only when the request asks for a judgement - and that
+is recognised by a list of words and phrasings ("rate", "review", "is it good", "who is
+right", "do they?"). A request for a verdict phrased some other way is left as written.
+The restatements are templates: a sentence the templates do not fit keeps its framing.
+
+The held-out half of the broad set measures this honestly only up to a point: the same
+person wrote it, the labels and the mechanisms, on the same day.
+
 ## The rules that decide what a task needs were written alongside the tests
 
 Neutral now removes descriptions like "a 58-year-old" or "Nigerian" unless the request

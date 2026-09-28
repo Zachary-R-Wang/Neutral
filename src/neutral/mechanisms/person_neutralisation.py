@@ -161,9 +161,9 @@ class Neutralisation:
 
 def protected_spans(prompt: str) -> list[Span]:
     """The parts of the prompt that are the work itself, and are never edited."""
-    spans = [Span(m.start(), m.end()) for m in _QUOTED.finditer(prompt)]
-    spans += [Span(m.start(), m.end()) for m in _INDENTED.finditer(prompt)]
-    return sorted(spans, key=lambda s: s.start)
+    from neutral.work import work_spans
+
+    return work_spans(prompt)
 
 
 def _inside(position: int, protected: list[Span]) -> bool:
@@ -350,7 +350,7 @@ def _first_person_refs(
 
 
 def find_person_refs(
-    prompt: str, self_label: str = DEFAULT_SELF_LABEL
+    prompt: str, self_label: str = DEFAULT_SELF_LABEL, *, as_author: bool = True
 ) -> tuple[list[PersonRef], str]:
     """Every reference the asker makes to themselves, and which framing the prompt used.
 
@@ -365,7 +365,9 @@ def find_person_refs(
     Never returns a reference inside the work being assessed.
     """
     protected = protected_spans(prompt)
-    authorship = claims_authorship(prompt, protected)
+    # In a request for a verdict the work has been made nobody's ("the code"), so a claim
+    # to have written it is not restated as "the author" - that would say it again.
+    authorship = as_author and claims_authorship(prompt, protected)
     referent, possessive = (REFERENT, POSSESSIVE) if authorship else (self_label, f"{self_label}'s")
 
     refs: list[PersonRef] = []
@@ -566,7 +568,7 @@ def find_asker_roles(prompt: str, protected: list[Span] | None = None) -> list[A
     nlp = _model()
     if nlp is None:
         return []
-    protected = protected or []
+    protected = protected if protected is not None else protected_spans(prompt)
     doc = nlp(prompt)
     found: list[AskerRole] = []
     for as_ in doc:

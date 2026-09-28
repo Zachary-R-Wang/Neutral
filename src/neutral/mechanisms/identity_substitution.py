@@ -165,6 +165,8 @@ _ATTRIBUTE_REASONS = {
     "origin": "nationality, ethnicity or race invites assumptions the task does not need",
     "religion": "religion invites assumptions the task does not need",
     "orientation": "sexual orientation or gender identity is not what the task is about",
+    "appearance": "how someone looks is not what the task is about",
+    "class": "where someone studied signals class and prestige the task does not need",
 }
 
 
@@ -214,16 +216,173 @@ def _attribute_edits(prompt: str, findings: list[Finding], allowed: set[int]) ->
     survives. Everything else is removed along with the space beside it, and an article
     left in front of a different sound is corrected: "an 18 year old model" -> "a model".
     """
-    from neutral.detect_attributes import ATTRIBUTE_KINDS, FAMILY_NOUNS, GENDER_NOUNS
+    from neutral.detect import _model
+    from neutral.detect_attributes import (
+        ATTRIBUTE_KINDS,
+        FAMILY_NOUNS,
+        GENDER_NOUNS,
+        ORIGIN_NOUNS,
+    )
+
+    described = [findings[i] for i in sorted(allowed) if findings[i].kind in ATTRIBUTE_KINDS]
+    if not described:
+        return []
+    nlp = _model()
+    doc = nlp(prompt) if nlp is not None else None
+    at = {t.idx: t for t in doc} if doc is not None else {}
+    covered = [(f.span.start, f.span.end) for f in described]
+
+    def is_described(token) -> bool:
+        return any(s <= token.idx and token.idx + len(token.text) <= e for s, e in covered)
 
     edits: list[_Edit] = []
-    for index in sorted(allowed):
-        finding = findings[index]
-        if finding.kind not in ATTRIBUTE_KINDS:
+    handled: set[int] = set()
+    for finding in described:
+        token = at.get(finding.span.start)
+        if token is None or id(finding) in handled:
+            continue
+        reason = _ATTRIBUTE_REASONS[finding.kind]
+        # "Our CEO, a Harvard-educated woman in her 40s, wants...": an aside that is nothing
+        # but description goes whole, commas and all.
+        if token.dep_ == "appos" or token.head.dep_ == "appos":
+            noun = token if token.dep_ == "appos" else token.head
+            words = [t for t in noun.subtree if not t.is_punct and t.dep_ != "det"]
+            if all(is_described(t) or t.lower_ in ("in", "their", "his", "her") for t in words):
+                first = min(t.idx for t in noun.subtree)
+                last = max(t.idx + len(t.text) for t in noun.subtree)
+                before = re.search(r",\s*$", prompt[:first])
+                after = re.match(r"\s*,", prompt[last:])
+                if before and after:
+                    edits.append(
+                        _Edit(
+                            Span(before.start(), last + after.end()),
+                            "",
+                            prompt[first:last],
+                            finding.kind,
+                            reason,
+                        )
+                    )
+                    for f in described:
+                        if first <= f.span.start < last:
+                            handled.add(id(f))
+                    continue
+        # Said of someone after "is": "He is Polish and very direct" -> "He is very direct";
+        # "He's Russian and seems honest" -> "He seems honest"; "She's 21, super sweet and
+        # pretty, and her skills are excellent" -> "her skills are excellent".
+        if token.dep_ in ("attr", "acomp") and token.head.pos_ == "AUX":
+            cop = token.head
+            pred_end = max(token.subtree, key=lambda t: t.i)
+            nxt = doc[pred_end.i + 1] if pred_end.i + 1 < len(doc) else None
+            after = doc[nxt.i + 1] if nxt is not None and nxt.i + 1 < len(doc) else None
+            if nxt is not None and nxt.lower_ == "and" and after is not None:
+                if after.dep_ == "conj" and after.head == cop and after.pos_ == "VERB":
+                    start = cop.idx - (1 if prompt[cop.idx - 1 : cop.idx] == " " else 0)
+                    edits.append(
+                        _Edit(Span(start, after.idx), " ", finding.text, finding.kind, reason)
+                    )
+                    handled.add(id(finding))
+                    continue
+                if not is_described(after) and after.dep_ == "conj" and after.head == token:
+                    edits.append(
+                        _Edit(Span(token.idx, after.idx), "", finding.text, finding.kind, reason)
+                    )
+                    handled.add(id(finding))
+                    continue
+            predicate = [
+                t
+                for t in token.subtree
+                if not t.is_punct
+                and t.dep_ != "det"
+                and t.lower_ not in ("and", "super", "very", "really", "quite", "so")
+            ]
+            # "is a 52 year old mother of two trying to...", "are a hijab-wearing immigrant
+            # who joined...": once the description is gone nothing is left to be, so the
+            # verb that follows takes over. "is trying to", "joined".
+            head_noun = token if token.pos_ == "NOUN" else None
+            if head_noun is not None:
+                follow = [
+                    c
+                    for c in head_noun.rights
+                    if c.dep_ in ("acl", "relcl") and c.pos_ in ("VERB", "AUX")
+                ]
+                owned = [t for t in head_noun.subtree if follow and t.i < follow[0].i]
+                if follow and all(
+                    is_described(t)
+                    or t.dep_ == "det"
+                    or t.is_punct
+                    or t.lower_ == "of"
+                    or t.like_num
+                    for t in owned
+                ):
+                    verb = follow[0]
+                    if verb.dep_ == "acl":  # "is [a mother of two] trying to"
+                        cut = Span(owned[0].idx, verb.idx)
+                        edits.append(
+                            _Edit(cut, "", prompt[cut.start : cut.end], finding.kind, reason)
+                        )
+                    else:  # "are [a person] who joined" -> "joined"
+                        who = [c for c in verb.children if c.dep_.startswith("nsubj")]
+                        stop = (who[0].idx + len(who[0].text) + 1) if who else verb.idx
+                        start = cop.idx - (1 if prompt[cop.idx - 1 : cop.idx] == " " else 0)
+                        text = prompt[start:stop]
+                        replacement = " " if cop.text.startswith("'") is False else " "
+                        if start == cop.idx and cop.text.startswith("'"):
+                            replacement = " "
+                        edits.append(
+                            _Edit(Span(start, stop), replacement, text, finding.kind, reason)
+                        )
+                        plural = _plural(verb)
+                        subj = [c for c in cop.children if c.dep_ in ("nsubj", "nsubjpass")]
+                        if (
+                            plural
+                            and plural != verb.text
+                            and subj
+                            and subj[0].lower_ in ("he", "she", "they")
+                        ):
+                            edits.append(
+                                _Edit(
+                                    Span(verb.idx, verb.idx + len(verb.text)),
+                                    plural,
+                                    verb.text,
+                                    "agreement",
+                                    reason,
+                                )
+                            )
+                    for f in described:
+                        if owned[0].idx <= f.span.start < verb.idx:
+                            handled.add(id(f))
+                    continue
+            if all(is_described(t) for t in predicate):
+                subject = [c for c in cop.children if c.dep_ in ("nsubj", "nsubjpass")]
+                clause_start = min([cop.idx] + [t.idx for s in subject for t in s.subtree])
+                last = max(t.idx + len(t.text) for t in token.subtree)
+                join = re.match(r"\s*,?\s*(?:and\s+|but\s+)?", prompt[last:])
+                rest = prompt[last + join.end() :]
+                if rest and not re.match(r"[.!?]", rest):
+                    edits.append(
+                        _Edit(
+                            Span(clause_start, last + join.end()),
+                            "",
+                            prompt[clause_start:last],
+                            finding.kind,
+                            reason,
+                        )
+                    )
+                    for f in described:
+                        if clause_start <= f.span.start < last:
+                            handled.add(id(f))
+                    continue
+
+    for finding in described:
+        if id(finding) in handled:
             continue
         reason = _ATTRIBUTE_REASONS[finding.kind]
         low = finding.text.lower()
-        neutral = GENDER_NOUNS.get(low) or FAMILY_NOUNS.get(low)
+        neutral = GENDER_NOUNS.get(low) or FAMILY_NOUNS.get(low) or ORIGIN_NOUNS.get(low)
+        if finding.kind == "family" and re.match(
+            r"(?i)(?:mother|father|mom|mum|dad|parent)\s+of\b", finding.text
+        ):
+            neutral = "person"
         if neutral:
             edits.append(
                 _Edit(
@@ -236,6 +395,18 @@ def _attribute_edits(prompt: str, findings: list[Finding], allowed: set[int]) ->
             )
             continue
         start, end = finding.span.start, finding.span.end
+        if finding.text.endswith(", "):
+            # An item in a list or an aside: "candidate: 45, divorced, ..." loses "45, ";
+            # "Ms. Nguyen, 58, and" loses ", 58," and keeps its space.
+            if re.search(r"[A-Za-z.],\s$", prompt[:start]) and not re.search(
+                r":\s*$", prompt[:start]
+            ):
+                edits.append(
+                    _Edit(Span(start - 2, end - 1), "", finding.text, finding.kind, reason)
+                )
+            else:
+                edits.append(_Edit(finding.span, "", finding.text, finding.kind, reason))
+            continue
         if finding.kind == "age" and _stands_for_the_person(prompt, finding):
             # "as a 45-year-old" or "a 45-year-old applied": the age is the person, not a
             # word about them. After "as a", the whole phrase goes; elsewhere it becomes
@@ -257,6 +428,23 @@ def _attribute_edits(prompt: str, findings: list[Finding], allowed: set[int]) ->
 
     edits.sort(key=lambda e: e.span.start)
     fixes: list[_Edit] = []
+    for edit in edits:
+        # "an immigrant" -> "a person": the article follows the new word.
+        if not edit.replacement.strip() or edit.kind == "agreement":
+            continue
+        article = re.search(r"\b(an?)\s+$", prompt[: edit.span.start], re.I)
+        if article:
+            wanted = "an" if _takes_an(edit.replacement.strip()) else "a"
+            if article.group(1).lower() != wanted:
+                fixes.append(
+                    _Edit(
+                        Span(article.start(1), article.end(1)),
+                        _match_case(article.group(1), wanted),
+                        article.group(1),
+                        "agreement",
+                        "the article matches the word that now follows it",
+                    )
+                )
     for i, edit in enumerate(edits):
         if edit.replacement:
             continue
@@ -341,6 +529,17 @@ def _grammar(prompt: str, findings: list[Finding], allowed: set[int]):
                     following.text,
                 )
             )
+            # "He's Russian and seems honest": if the description goes, "seems" is left
+            # with "they", so it agrees now either way.
+            for conj in following.conjuncts:
+                if conj.pos_ == "VERB" and not any(
+                    k.dep_.startswith("nsubj") for k in conj.children
+                ):
+                    plural = _plural(conj)
+                    if plural and plural != conj.text:
+                        edits.append(
+                            _Edit(Span(conj.idx, conj.idx + len(conj.text)), plural, conj.text)
+                        )
             continue
         if token.dep_ in ("nsubj", "nsubjpass"):
             head = token.head
@@ -404,11 +603,15 @@ def apply(prompt: str, findings: list[Finding], allowed: set[int]) -> Substituti
         for e in agreement
         if not any(e.span.start < c.end and e.span.end > c.start for c in claimed)
     ]
+    removed = [e.span for e in described if not e.replacement.strip()]
     work: list[tuple[int, int | None, _Edit | None]] = sorted(
         [
             (f.span.start, i, None)
             for i, f in enumerate(findings)
-            if i in allowed and f.kind not in ATTRIBUTE_KINDS
+            if i in allowed
+            and f.kind not in ATTRIBUTE_KINDS
+            # A pronoun or name inside a clause being removed goes with the clause.
+            and not any(r.start <= f.span.start and f.span.end <= r.end for r in removed)
         ]
         + [(e.span.start, None, e) for e in agreement + described],
         key=lambda w: w[0],

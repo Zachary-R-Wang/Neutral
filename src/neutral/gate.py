@@ -43,7 +43,7 @@ _RULES: tuple[tuple[tuple[str, ...], str, re.Pattern[str]], ...] = (
         ALL,
         "the request is about the law or someone's rights",
         re.compile(
-            r"\b(?:law|laws|legal|legally|illegal|rights?|discriminat\w*|regulations?|"
+            r"\b(?:law|laws|legal|legally|illegal|rights|discriminat\w*|regulations?|"
             r"complian\w*|lawsuit|sue|tribunal|eeoc|protected\s+characteristics?)\b",
             re.I,
         ),
@@ -101,14 +101,56 @@ _RULES: tuple[tuple[tuple[str, ...], str, re.Pattern[str]], ...] = (
         "the request is about parental or family leave",
         re.compile(r"\b(?:maternity|paternity|parental|adoption)\b", re.I),
     ),
+    (
+        ALL,
+        "the request is about how the person is treated because of who they are",
+        re.compile(
+            r"\b(?:treated\s+differently|ignor(?:e|es|ed|ing)|excluded|targeted|"
+            r"jokes?\s+about|comments?\s+about|slurs?|(?:report|reporting|complain\w*)\b.{0,20}\bhr|"
+            r"male-dominated|female-dominated|only\s+(?:woman|man|women|men|black|asian|latina|"
+            r"latino|gay|muslim|jewish|person\s+of\s+colou?r)|pay\s+gap|equal\s+pay|underpaid|"
+            r"glass\s+ceiling|taken\s+seriously|heritage|roots)\b",
+            re.I,
+        ),
+    ),
+    (
+        (AGE,),
+        "the request is about the person's age",
+        re.compile(r"\b(?:too\s+old|too\s+young|at\s+my\s+age|age\s+limit|ageis\w*)\b", re.I),
+    ),
+    (
+        (RELIGION, ORIGIN),
+        "the request is about religious observance",
+        re.compile(
+            r"\b(?:faith|devout|church|mosque|synagogue|temple|worship|sabbath|shabbat|"
+            r"sundays?|friday\s+night|ethical\s+for\s+me)\b",
+            re.I,
+        ),
+    ),
+    (
+        (AGE, FAMILY),
+        "the request is about money over a lifetime, where age and family change the answer",
+        re.compile(
+            r"\b(?:savings|invest\w*|index\s+funds?|retirement|retiring|pension|401k|mortgage|"
+            r"insurance|estate|will\s+and\s+testament)\b",
+            re.I,
+        ),
+    ),
 )
 
 
 def rules_verdicts(prompt: str, findings: list[Finding]) -> list[Verdict]:
     out = []
     for finding in findings:
+        # A description never argues for keeping itself: "has a heavy accent on the phone"
+        # must not match the rule that keeps accents when accents are the question.
+        masked = (
+            prompt[: finding.span.start]
+            + " " * (finding.span.end - finding.span.start)
+            + prompt[finding.span.end :]
+        )
         for kinds, why, pattern in _RULES:
-            if finding.kind in kinds and pattern.search(prompt):
+            if finding.kind in kinds and pattern.search(masked):
                 out.append(Verdict(True, f"kept: {why}"))
                 break
         else:
@@ -211,6 +253,34 @@ def identity_verdict(prompt: str, kind: str) -> Verdict:
     if rule.search(prompt):
         return Verdict(True, f"kept: {why}")
     return Verdict(False, "replaced: nothing in the request depends on it")
+
+
+# A request for a judgement: a rating, a verdict, feedback, a choice between options, or
+# whether a claim is true. Where it is found, what the person asking says about their own
+# stake is taken out (mechanisms/self_presentation.py); where it is not - "I'm nervous,
+# how do I calm down?" - that is the question, and it stays.
+JUDGEMENT_RULE = re.compile(
+    r"\b(?:rate|rating|review|critique|critic\w*|assess\w*|evaluat\w*|grade|score|judge|"
+    r"rank|feedback|opinion|what\s+do\s+you\s+think|thoughts\s+on|"
+    r"is\s+(?:it|this|that|my\s+\w+(?:\s+\w+)?|the\s+\w+)\s+(?:any\s+)?(?:good|ok|okay|fine|"
+    r"strong|right|correct|valid|fair|funny|catchy|reasonable|realistic|smart|original|"
+    r"worth|ready|better|a\s+good\s+idea|good\s+enough)|will\s+it\s+work|who(?:'s|\s+is)\s+right|"
+    r"which\s+(?:is|one|of)\b.*\b(?:better|best)|valid|confirm|honest(?:ly)?|pros\s+and\s+cons|"
+    r"does\s+the\s+evidence|is\s+it\s+true|do\s+they|does\s+it|better\s+use|"
+    r"don't\s+you\s+(?:think|agree)|wouldn't\s+you\s+agree|am\s+i\s+(?:right|wrong)|"
+    r"(?:tell\s+me|let\s+me\s+know)\s+(?:honestly\s+)?(?:if|whether)|"
+    r"(?:if|whether)\b[^.?!]{0,60}\b(?:is|are|was|will)\b[^.?!]{0,30}\b(?:good|funny|catchy|"
+    r"strong|right|correct|valid|fair|work|original|any\s+good))\b",
+    re.I,
+)
+
+
+def asks_for_judgement(prompt: str) -> Verdict:
+    """Whether the request asks for a verdict. `needed` here means: yes, it does."""
+    m = JUDGEMENT_RULE.search(prompt)
+    if m:
+        return Verdict(True, f'the request asks for a judgement ("{m.group(0)}")')
+    return Verdict(False, "the request does not ask for a judgement")
 
 
 def gate_name() -> str:

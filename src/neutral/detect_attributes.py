@@ -36,9 +36,8 @@ AGE, GENDER, FAMILY, ORIGIN, RELIGION, ORIENTATION = (
     "religion",
     "orientation",
 )
-ATTRIBUTE_KINDS = (AGE, GENDER, FAMILY, ORIGIN, RELIGION, ORIENTATION)
-
-_QUOTED = re.compile(r'"[^"]*"|“[^”]*”|(?<=:\s)\'[^\']+\'', re.S)
+APPEARANCE, CLASS = "appearance", "class"
+ATTRIBUTE_KINDS = (AGE, GENDER, FAMILY, ORIGIN, RELIGION, ORIENTATION, APPEARANCE, CLASS)
 
 _NUMBER_WORDS = "twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety"
 _AGE_PATTERNS = (
@@ -78,6 +77,9 @@ GENDER_NOUNS = {
     "gentleman": "person",
     "gentlemen": "people",
     "gal": "person",
+    "guy": "person",
+    "guys": "people",
+    "dude": "person",
     "actress": "actor",
     "actresses": "actors",
     "waitress": "server",
@@ -167,6 +169,87 @@ _ORIENTATIONS = {
     "lgbtq+",
 }
 _RACES = {"black", "white", "brown", "asian", "hispanic", "latino", "latina", "latinx"}
+# Nationalities, so a tagger slip does not decide who is protected: spaCy tags "Filipino"
+# as a language. Adjective forms only; country names are handled as "from <place>".
+DEMONYMS = set(
+    """afghan albanian algerian american angolan argentine argentinian armenian australian
+    austrian azerbaijani bahraini bangladeshi belarusian belgian bolivian bosnian brazilian
+    british bulgarian burmese cambodian cameroonian canadian chilean chinese colombian
+    congolese croatian cuban cypriot czech danish dominican dutch ecuadorian egyptian emirati
+    english eritrean estonian ethiopian fijian filipino filipina finnish french georgian german
+    ghanaian greek guatemalan haitian honduran hungarian icelandic indian indonesian iranian
+    iraqi irish israeli italian ivorian jamaican japanese jordanian kazakh kenyan korean
+    kosovar kurdish kuwaiti kyrgyz lao latvian lebanese liberian libyan lithuanian malagasy
+    malawian malaysian malian maltese mauritian mexican moldovan mongolian montenegrin
+    moroccan mozambican namibian nepalese nepali nicaraguan nigerian nigerien norwegian omani
+    pakistani palestinian panamanian paraguayan persian peruvian polish portuguese
+    puerto-rican qatari romanian russian rwandan salvadoran samoan saudi scottish senegalese
+    serbian sierra-leonean singaporean slovak slovenian somali south-african spanish
+    sri-lankan sudanese swedish swiss syrian taiwanese tajik tanzanian thai tibetan togolese
+    tongan trinidadian tunisian turkish turkmen ugandan ukrainian uruguayan uzbek venezuelan
+    vietnamese welsh yemeni zambian zimbabwean arab arabic african european caribbean
+    scandinavian slavic balkan middle-eastern chinese-american korean-american
+    mexican-american indian-american japanese-american african-american asian-american
+    italian-american irish-american""".split()
+)
+_APPEARANCE = {
+    "pretty",
+    "attractive",
+    "beautiful",
+    "handsome",
+    "cute",
+    "gorgeous",
+    "hot",
+    "sexy",
+    "ugly",
+    "unattractive",
+    "overweight",
+    "fat",
+    "skinny",
+    "obese",
+    "chubby",
+    "petite",
+    "sweet",
+    "plus-size",
+}
+# Where someone comes from, said as a noun or a phrase rather than an adjective.
+ORIGIN_NOUNS = {
+    "immigrant": "person",
+    "immigrants": "people",
+    "migrant": "person",
+    "migrants": "people",
+    "refugee": "person",
+    "refugees": "people",
+    "expat": "person",
+    "expats": "people",
+    "foreigner": "person",
+    "foreigners": "people",
+}
+_ORIGIN_PHRASES = re.compile(
+    r"(?:,?\s+and\s+|,\s+)?(?:who\s+)?(?:speaks|speaking)\s+English\s+as\s+(?:a|his|her|their)\s+"
+    r"(?:second|third|foreign)\s+language"
+    r"|\bnon-native(?:\s+English)?(?:\s+speaker)?\b"
+    r"|(?:,?\s+and\s+|,\s+)?(?:who\s+)?(?:has|with)\s+an?\s+(?:heavy|strong|thick|foreign|slight)\s+accent"
+    r"(?:\s+on\s+the\s+phone)?",
+    re.I,
+)
+_CLASS = re.compile(
+    r"\b(?:Harvard|Yale|Princeton|Stanford|MIT|Oxford|Cambridge|Ivy[- ]League)[- ]"
+    r"(?:educated|trained)\b"
+    r"|,?\s*an?\s+(?:sophomore|freshman|junior|senior|student|dropout)\s+at\s+a\s+community\s+college"
+    r"|\b(?:an?\s+)?(?:Harvard|Yale|Princeton|Stanford|MIT|Oxford|Cambridge)\s+"
+    r"(?:graduate|grad|alum|alumnus|alumna)\s+(?=building|launching|running|working|pitching)",
+)
+# List items that describe a person: "Assess this candidate: 45, divorced, two kids, ..."
+_LIST_AGE = re.compile(r"(?<=[:,]\s)(?:1[89]|[2-9]\d)(?:,\s+)(?=[a-z])")
+_LIST_FAMILY = re.compile(
+    r"(?<=[:,]\s)(?:married|divorced|widowed|separated|single|childless|"
+    r"(?:no|one|two|three|four|five|six|\d)\s+(?:kids|children|sons|daughters))(?:,\s+)(?=[a-z0-9])",
+)
+# A parent counted: "a mother of two" is a description of family, not of work.
+_PARENT_OF = re.compile(
+    r"\b(?:mother|father|mom|mum|dad|parent)\s+of\s+(?:one|two|three|four|five|six|\d+)\b", re.I
+)
 
 # Nouns that name a person. Listed where a suffix would not catch them, and a suffix
 # rule for the rest: an "-er", "-ist", "-ant" is usually somebody.
@@ -342,12 +425,15 @@ def _is_person(noun) -> bool:
     return low.endswith(("er", "or", "ist", "ian", "ant", "ent", "ee", "ess", "person"))
 
 
-def _quoted(prompt: str) -> list[tuple[int, int]]:
-    return [(m.start(), m.end()) for m in _QUOTED.finditer(prompt)]
+def _inside(start: int, spans) -> bool:
+    return any(s.start <= start < s.end for s in spans)
 
 
-def _inside(start: int, spans: list[tuple[int, int]]) -> bool:
-    return any(s <= start < e for s, e in spans)
+def _has_person_subject(verb) -> bool:
+    subjects = [c for c in verb.children if c.dep_ in ("nsubj", "nsubjpass")]
+    return any(
+        s.lower_ in ("he", "she", "they", "i", "we", "you") or _is_person(s) for s in subjects
+    )
 
 
 def detect_attributes(prompt: str, claimed: list[Span] | None = None) -> list[Finding]:
@@ -357,8 +443,9 @@ def detect_attributes(prompt: str, claimed: list[Span] | None = None) -> list[Fi
     returned, so a name and a description are never replaced twice.
     """
     from neutral.detect import _model
+    from neutral.work import work_spans
 
-    quoted = _quoted(prompt)
+    quoted = work_spans(prompt)
     taken: list[tuple[int, int]] = [(c.start, c.end) for c in claimed or []]
     found: list[Finding] = []
 
@@ -379,6 +466,16 @@ def detect_attributes(prompt: str, claimed: list[Span] | None = None) -> list[Fi
         add(match.start(), match.end(), AGE)
     for match in _RELIGIOUS_DRESS.finditer(prompt):
         add(match.start(), match.end(), RELIGION)
+    for match in _ORIGIN_PHRASES.finditer(prompt):
+        add(match.start(), match.end(), ORIGIN)
+    for match in _CLASS.finditer(prompt):
+        add(match.start(), match.end(), CLASS)
+    for match in _LIST_AGE.finditer(prompt):
+        add(match.start(), match.end(), AGE)
+    for match in _LIST_FAMILY.finditer(prompt):
+        add(match.start(), match.end(), FAMILY)
+    for match in _PARENT_OF.finditer(prompt):
+        add(match.start(), match.end(), FAMILY)
 
     nlp = _model()
     if nlp is None:
@@ -400,6 +497,48 @@ def detect_attributes(prompt: str, claimed: list[Span] | None = None) -> list[Fi
             if low in FAMILY_NOUNS:
                 add(start, end, FAMILY)
                 continue
+            if low in ORIGIN_NOUNS:
+                add(start, end, ORIGIN)
+                # "an immigrant from Mexico": where from goes with it.
+                for child in token.rights:
+                    if child.dep_ == "prep" and child.lower_ == "from":
+                        tail = max(t.idx + len(t.text) for t in child.subtree)
+                        add(child.idx - 1, tail, ORIGIN)
+                continue
+
+        # An age said beside a name or a person: "Ms. Nguyen, 58, and", "candidate: 45,".
+        if token.like_num and token.dep_ == "appos" and _is_person(head):
+            try:
+                years = int(token.text)
+            except ValueError:
+                years = 0
+            if 18 <= years <= 99:
+                before = prompt[:start]
+                lead = len(before) - len(before.rstrip(" ,"))
+                if before.rstrip(" ").endswith(","):
+                    add(start - lead, end, AGE)
+                continue
+
+        # Said of a person after "is": "He's Polish", "She's 21", "They are gorgeous".
+        if token.dep_ in ("attr", "acomp") and _has_person_subject(head):
+            if low in DEMONYMS or low in _RACES or token.ent_type_ in ("NORP", "LANGUAGE"):
+                add(start, end, ORIGIN if low not in _RELIGIONS else RELIGION)
+                continue
+            if low in _APPEARANCE:
+                add(start, end, APPEARANCE)
+                continue
+            if low in _ORIENTATIONS:
+                add(start, end, ORIENTATION)
+                continue
+            if token.like_num and token.text.isdigit() and 18 <= int(token.text) <= 99:
+                add(start, end, AGE)
+                for child in token.children:  # "She's 21, super sweet and pretty"
+                    if child.lower_ in _APPEARANCE:
+                        add(child.idx, child.idx + len(child.text), APPEARANCE)
+                        for c in child.conjuncts:
+                            if c.lower_ in _APPEARANCE:
+                                add(c.idx, c.idx + len(c.text), APPEARANCE)
+                continue
 
         # Words that describe a person noun: "female colleague", "Nigerian engineer".
         modifies_person = token.dep_ in ("amod", "compound", "nmod", "appos") and _is_person(head)
@@ -419,13 +558,17 @@ def detect_attributes(prompt: str, claimed: list[Span] | None = None) -> list[Fi
             continue
         if low in _AGE_WORDS:
             add(start, end, AGE)
+        elif low in _APPEARANCE:
+            add(start, end, APPEARANCE)
+        elif low in DEMONYMS:
+            add(start, end, ORIGIN)
         elif low in _GENDER_MODIFIERS:
             add(start, end, GENDER)
         elif low in _RELIGIONS:
             add(start, end, RELIGION)
         elif low in _ORIENTATIONS:
             add(start, end, ORIENTATION)
-        elif low in _RACES or (token.ent_type_ == "NORP" and low not in _RELIGIONS):
+        elif low in _RACES or (token.ent_type_ in ("NORP", "LANGUAGE") and low not in _RELIGIONS):
             add(start, end, ORIGIN)
 
     return sorted(found, key=lambda f: f.span.start)

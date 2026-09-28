@@ -102,7 +102,11 @@ def verify(prompt: str, claimed: list[DetectedSpan]) -> list[Finding]:
 
 
 def find_pronouns(prompt: str, skip: list[Finding]) -> list[Finding]:
-    """Gendered pronouns, by lookup. Spans already claimed by a name are left alone."""
+    """Gendered pronouns, by lookup. Spans already claimed by a name are left alone, and
+    so is the work being assessed: "she" in a quoted joke is the joke's."""
+    from neutral.work import inside, work_spans
+
+    work = work_spans(prompt)
     claimed = [(f.span.start, f.span.end) for f in skip]
     findings = []
     for match in _WORD.finditer(prompt):
@@ -118,6 +122,8 @@ def find_pronouns(prompt: str, skip: list[Finding]) -> list[Finding]:
             word = contracted.group(1)
             end = start + len(word)
         if any(start < c_end and end > c_start for c_start, c_end in claimed):
+            continue
+        if inside(start, work):
             continue
         findings.append(Finding(Span(start, end), word, "pronoun"))
     return findings

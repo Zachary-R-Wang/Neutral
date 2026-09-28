@@ -1,5 +1,23 @@
 # Results
 
+## Broad set: from 43% to 94% of what should go, removed — measured 2026-09-28
+
+90 prompts from everything people ask, split by a hash of their id. Mechanisms were built
+against `dev`; `test` was only ever read as a total.
+
+| | dev before | dev after | test before | test after |
+|---|---|---|---|---|
+| Should change, changed | 40 / 41 | 40 / 41 | 28 / 29 | 29 / 29 |
+| Should go, removed | 35 / 81 | 76 / 81 | 18 / 42 | 33 / 42 |
+| Must stay, kept | 84 / 90 | 90 / 90 | 61 / 65 | 63 / 65 |
+
+The held-out half improved from 43% to 79% removed, less than the half built against
+(43% to 94%): some of the gain is fitted to the prompts that were looked at. 79% is the
+number to quote.
+
+Self-presentation - emotion, effort, credentials, what friends said, the asker's own
+verdict - went from 0 of 32 removed to 29 of 32 on the half built against.
+
 ## Neutral now changes most everyday prompts — measured 2026-09-28
 
 | `make relevance` | Before | After |

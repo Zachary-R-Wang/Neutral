@@ -512,6 +512,17 @@ def show_relevance(args: argparse.Namespace) -> int:
     print("\n  What Neutral does to prompts, before any model sees them\n")
     for r in results:
         print(f"  {r.passed:>3} / {r.total:<3} {r.name:<14} {r.meaning}")
+    from neutral.eval.relevance import measure_broad
+
+    broad = ROOT / "datasets" / "relevance" / "v1" / "broad.yaml"
+    print("\n  Broad set - prompts from everything people ask, in two halves")
+    for split in ("dev", "test"):
+        b = measure_broad(broad, split)
+        label = "built against" if split == "dev" else "held out, never tuned to"
+        print(
+            f"  {split:<5} ({label}): changed {b.changed.passed}/{b.changed.total}, "
+            f"removed {b.removed.passed}/{b.removed.total}, kept {b.kept.passed}/{b.kept.total}"
+        )
     for r in results:
         if r.failures and (args.all or r.name in ("safety", "relevant", "  removed", "  kept")):
             print(f"\n  {r.name}: not as expected")

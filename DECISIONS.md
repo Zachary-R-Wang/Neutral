@@ -5,6 +5,55 @@ minds. Newest first.
 
 ---
 
+## 2026-09-28 — A request for a verdict is asked without one
+
+**The instruction.** "Literally every single prompt imaginable gets insufficient changes."
+Then, on "Is it true that my code is really clean and efficient?": still the owner, still
+"really", still leading - "Something like 'Evaluate the efficiency of the code' would
+obviously work a trillion times better."
+
+**How it was measured first.** A broad set of 90 prompts from everything people ask
+(`datasets/relevance/v1/broad.yaml`), labelled with what must go and what must stay,
+written before the mechanisms below. It is split by a hash of each id into a half the
+mechanisms were built against and a half reported only as a total. Before: 35 of 81 and
+18 of 42 things removed; none of 32 passages of self-presentation removed.
+
+**What was built, all inside Mechanism 3, and all only when the request asks for a
+verdict** (`gate.asks_for_judgement`):
+
+- *The request itself is reframed* (`mechanisms/neutral_judgement.py`). "I think my code
+  is really clean and efficient. Can you confirm?" -> "Evaluate the cleanliness and
+  efficiency of the code." No owner, no intensifier, no polarity, no yes/no. "Don't you
+  think X is better?" -> "Evaluate whether X is better or worse". "I think X kills Y. Do
+  they?" -> "Evaluate the effect of X on Y". The thing judged is never edited; only the
+  words around it are replaced.
+- *Nobody owns the thing judged.* "my code", "a colleague's cover letter" -> "the code",
+  "the cover letter" - both, so the matched authorship pairs still converge.
+- *Self-presentation goes* (`mechanisms/self_presentation.py`): emotion, effort, the
+  asker's own verdict, credentials offered as authority, what friends and family said,
+  politics, which one is theirs. Where a line carries the thing being judged it is
+  restated: "I've decided to cut the budget" -> "The plan is to cut the budget".
+- *The work is protected everywhere* (`work.py`): single quotes, code and "Essay: ..."
+  now count, after the set showed code being edited ("for the author in range").
+
+Descriptions gained predicates ("He's Russian and seems honest" -> "They seem honest"),
+asides ("Our CEO, a Harvard-educated woman in her 40s, wants" -> "Our CEO wants"), lists,
+ages after names, origin phrases, appearance and class markers.
+
+**After:** 76 of 81 removed and 90 of 90 kept on the half built against; 33 of 42
+removed and 63 of 65 kept on the held-out half. Matched evaluation pairs that converge:
+52 of 70. Every safety prompt is still sent untouched.
+
+**Why "Evaluate" and not "Is it true that".** The first version restated a leading
+question as another question. A yes/no about a claim still carries the claim; an
+instruction to assess a quality does not.
+
+**What was refused.** "Assess this candidate: 45, divorced, two kids" is held by the
+safety rules because "kids" can mean a child is involved. Narrowing S3 for a better
+score is the accident CLAUDE.md warns about, so it stays held.
+
+---
+
 ## 2026-09-28 — Descriptions of people are removed, and rules - not Laya - decide when
 
 **The instruction.** "The big problem is not that the mechanisms are bad, but that you

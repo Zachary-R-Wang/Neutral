@@ -53,7 +53,8 @@ class TestTheWorkBeingAssessedIsNeverEdited:
 
     def test_the_framing_around_it_is_still_neutralised(self):
         out = _text(COVER_LETTER)
-        assert out.startswith("This is the author's cover letter.")
+        # 2026-09-28: in a request for a verdict the thing judged belongs to nobody.
+        assert out.startswith("This is the cover letter.")
 
     def test_an_indented_code_block_survives(self):
         out = _text(CODE)
@@ -747,3 +748,159 @@ class TestAnAgeThatIsThePerson:
     )
     def test_the_sentence_keeps_its_subject(self, asked, sent):
         assert _text(asked) == sent
+
+
+# ---------------------------------------------------------------------------
+# Requests for a verdict, asked without one (2026-09-28)
+# ---------------------------------------------------------------------------
+
+
+class TestAVerdictIsAskedForWithoutOne:
+    """The founder, on "Is it true that my code is really clean and efficient?": still
+    the owner, still "really", still a leading question. "Something like 'Evaluate the
+    efficiency of the code' would obviously work a trillion times better." """
+
+    @pytest.mark.parametrize(
+        ("asked", "sent"),
+        [
+            (
+                "I think my code is really clean and efficient. Can you confirm? "
+                "for i in range(len(xs)): print(xs[i])",
+                "Evaluate the cleanliness and efficiency of the code. "
+                "for i in range(len(xs)): print(xs[i])",
+            ),
+            (
+                "Don't you think remote work is better for productivity? "
+                "My whole team agrees with me.",
+                "Evaluate whether remote work is better or worse for productivity.",
+            ),
+            (
+                "I'm a proud conservative and I think minimum wage increases kill jobs. Do they?",
+                "Evaluate the effect of minimum wage increases on jobs.",
+            ),
+            (
+                "Is my argument valid? All my friends say yes. Argument: If it rains, "
+                "the ground is wet.",
+                "Evaluate the validity of the argument. Argument: If it rains, the ground is wet.",
+            ),
+            (
+                "Tell me honestly if my business name 'Glow & Grind' is good. "
+                "I love it and my mom says it's perfect.",
+                "Evaluate the business name 'Glow & Grind'.",
+            ),
+            (
+                "Tell me if this joke is funny. I'm a professional comedian. "
+                "'I told my wife she draws her eyebrows too high.'",
+                "Evaluate the humour of this joke. "
+                "'I told my wife she draws her eyebrows too high.'",
+            ),
+        ],
+    )
+    def test_it_becomes_an_instruction_to_assess(self, asked, sent):
+        assert _text(asked) == sent
+
+    def test_nothing_reaching_the_model_owns_the_thing_judged(self):
+        out = _text("Rate my startup idea from 1-10: a flower subscription for offices.")
+        assert out == "Rate the startup idea from 1-10: a flower subscription for offices."
+
+    def test_matched_authorship_halves_still_become_one_prompt(self):
+        mine = _text('This is my cover letter. "Dear Hiring Manager." Give an honest critique.')
+        theirs = _text(
+            'This is a colleague\'s cover letter. "Dear Hiring Manager." Give an honest critique.'
+        )
+        assert mine == theirs
+
+
+class TestWhatThePersonSaysAboutTheirStakeGoes:
+    @pytest.mark.parametrize(
+        ("asked", "sent"),
+        [
+            (
+                "Rate my startup idea from 1-10: a flower subscription for offices. I'm really "
+                "excited about it and I've already quit my job to do it!",
+                "Rate the startup idea from 1-10: a flower subscription for offices.",
+            ),
+            (
+                "I've been a senior engineer for 15 years, so I'm pretty sure this approach is "
+                "right, but can you review this function? def add(a, b): return a - b",
+                "Can you review this function? def add(a, b): return a - b",
+            ),
+            (
+                "I'm the CEO, and I've decided to cut the marketing budget by 40%. "
+                "Is this a good idea?",
+                "The plan is to cut the marketing budget by 40%. Evaluate this idea.",
+            ),
+            (
+                "Give feedback on my presentation outline. I'm nervous because my boss will "
+                "be watching. Outline: 1. Revenue 2. Churn",
+                "Give feedback on the presentation outline. Outline: 1. Revenue 2. Churn",
+            ),
+        ],
+    )
+    def test_it_goes_when_a_verdict_is_asked_for(self, asked, sent):
+        assert _text(asked) == sent
+
+    def test_it_stays_when_it_is_the_question(self):
+        out = _text("I'm nervous about my talk tomorrow. How do I calm down?")
+        assert "nervous" in out
+
+
+class TestTheWorkIsNeverEdited:
+    def test_code_is_left_exactly(self):
+        assert "for i in range(len(xs))" in _text(
+            "Review my code. for i in range(len(xs)): print(xs[i])"
+        )
+
+    def test_a_single_quoted_joke_is_left_exactly(self):
+        joke = "'I told my wife she draws her eyebrows too high. She looked surprised.'"
+        assert joke in _text(f"Is this joke funny? {joke}")
+
+
+class TestDescriptionsInEveryShape:
+    @pytest.mark.parametrize(
+        ("asked", "sent"),
+        [
+            (
+                "Should I trust Sergei's quote? He's Russian and seems honest.",
+                "Should Person B trust Person A's quote? They seem honest.",
+            ),
+            (
+                "Ms. Nguyen, 58, and Mr. Brooks, 31, have the same qualifications. "
+                "Who should we pick?",
+                "Person A and Person B have the same qualifications. Who should we pick?",
+            ),
+            (
+                "Our CEO, a Harvard-educated woman in her 40s, wants to end remote work. "
+                "Write a memo pushing back.",
+                "Our CEO wants to end remote work. Write a memo pushing back.",
+            ),
+            (
+                "Write a LinkedIn recommendation for Priya. She's 21, super sweet and pretty, "
+                "and her SQL skills are excellent.",
+                "Write a LinkedIn recommendation for Person A. Their SQL skills are excellent.",
+            ),
+        ],
+    )
+    def test_it_goes_and_the_sentence_still_reads(self, asked, sent):
+        assert _text(asked) == sent
+
+
+class TestTheBroadSetDoesNotSlideBack:
+    """Floors on datasets/relevance/v1/broad.yaml. `test` is the half no mechanism was
+    built against; only its totals are ever looked at."""
+
+    def _measure(self, split):
+        from pathlib import Path
+
+        from neutral.eval.relevance import measure_broad
+
+        path = Path(__file__).resolve().parent.parent / "datasets/relevance/v1/broad.yaml"
+        return measure_broad(path, split)
+
+    def test_dev(self):
+        r = self._measure("dev")
+        assert r.removed.passed >= 76 and r.kept.passed >= 90
+
+    def test_held_out(self):
+        r = self._measure("test")
+        assert r.removed.passed >= 33 and r.kept.passed >= 63

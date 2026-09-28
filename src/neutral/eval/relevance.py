@@ -76,7 +76,9 @@ def load_set(path: Path) -> list[dict]:
     raw = yaml.safe_load(path.read_text()) or {}
     items = raw.get("items") or []
     for item in items:
-        missing = {"id", "prompt", "why"} - item.keys()
+        missing = {"id", "prompt"} - item.keys()
+        if not ({"why", "signals"} & item.keys()):
+            missing.add("why")
         if missing:
             raise RelevanceSetError(
                 f"{path.name}: item {item.get('id', '?')} is missing {sorted(missing)}. "
@@ -190,6 +192,102 @@ def measure_everyday(path: Path) -> tuple[SetResult, SetResult, SetResult]:
                 Outcome(item["id"], there, item["why"], done.processed, f"lost: {phrase!r}")
             )
     return changed, removed, kept
+
+
+_FUNCTION_WORDS = set(
+    """a an the and or but so to of in on at for with by from as is are was were be been am
+    it its it's this that these those i i'm i've i'd i'll me my mine myself we our you your
+    he she they them their his her hers him person author's author just really honestly
+    very do does did has have had will would can could should""".split()
+)
+
+
+def _stem(word: str) -> str:
+    word = re.sub(r"'s$", "", word)
+    if word.endswith("ies") and len(word) > 4:
+        return word[:-3] + "y"
+    if word.endswith("s") and len(word) > 3 and not word.endswith("ss"):
+        return word[:-1]
+    return word
+
+
+def _content(text: str) -> list[str]:
+    return [
+        _stem(w)
+        for w in re.findall(r"[a-z0-9$%][a-z0-9$%'-]*", text.lower())
+        if w not in _FUNCTION_WORDS and not re.fullmatch(r"[a-z]", w)
+    ]
+
+
+def _still_says(phrase: str, text: str) -> bool:
+    """Whether the text still says what the phrase said.
+
+    Not an exact match: "I spent three weeks on it" becoming "Person A spent three weeks
+    on it" has changed a word and removed nothing. Half or more of the phrase's content
+    words still there counts as still there. A phrase that is nothing but a pronoun is
+    checked as a word.
+    """
+    words = _content(phrase)
+    if not words:
+        return _present(phrase, text)
+    have = set(_content(text))
+    return sum(w in have for w in words) * 2 >= len(words)
+
+
+def split_of(item_id: str) -> str:
+    """ "test" when the first byte of sha256(id) is odd. Fixed, so nobody chooses it."""
+    import hashlib
+
+    return "test" if hashlib.sha256(item_id.encode()).digest()[0] & 1 else "dev"
+
+
+@dataclass
+class BroadResult:
+    split: str
+    changed: SetResult
+    removed: SetResult
+    kept: SetResult
+    by_signal: dict[str, list[bool]] = field(default_factory=dict)
+
+
+def measure_broad(path: Path, split: str) -> BroadResult:
+    """The broad set, one half at a time. Removal is scored per phrase and per signal."""
+    result = BroadResult(
+        split,
+        SetResult(f"broad {split}", "prompts where something should change, changed"),
+        SetResult("  removed", "each thing the task does not need is gone"),
+        SetResult("  kept", "each thing the task needs is still there"),
+    )
+    for item in load_set(path):
+        if split_of(item["id"]) != split:
+            continue
+        done = rewrite(item["prompt"])
+        remove = item.get("remove") or []
+        if remove:
+            result.changed.outcomes.append(
+                Outcome(item["id"], done.changed, "", done.processed, "nothing changed")
+            )
+        gone_all = True
+        for phrase in remove:
+            gone = not _still_says(phrase, done.processed)
+            gone_all &= gone
+            result.removed.outcomes.append(
+                Outcome(item["id"], gone, "", done.processed, f"still there: {phrase!r}")
+            )
+        for phrase in item.get("keep") or []:
+            there = phrase.lower() in done.processed.lower() or all(
+                w in set(_content(done.processed)) for w in _content(phrase)
+            )
+            result.kept.outcomes.append(
+                Outcome(item["id"], there, "", done.processed, f"lost: {phrase!r}")
+            )
+            if not there:
+                result.by_signal.setdefault("keep", []).append(False)
+        for signal in item.get("signals") or []:
+            if signal in ("keep", "none"):
+                continue
+            result.by_signal.setdefault(signal, []).append(gone_all)
+    return result
 
 
 def measure_all(root: Path) -> list[SetResult]:
