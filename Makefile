@@ -16,6 +16,13 @@ RUN := PYTHONPATH=src $(PY)
 .DEFAULT_GOAL := help
 .PHONY: help dev test eval lint dataset clean deploy email
 
+# Which Fly app `make deploy` and `make email` act on: read from fly.toml, so a copy of
+# Neutral deployed under another name needs only fly.toml changed. SITE and MAIL_FROM can
+# be given on the command line: make email SITE=https://example.org MAIL_FROM="Neutral <noreply@example.org>"
+APP := $(shell sed -n 's/^app = "\(.*\)"/\1/p' fly.toml)
+SITE ?= https://neutralai.app
+MAIL_FROM ?= Neutral <noreply@neutralai.app>
+
 help:
 	@echo ""
 	@echo "  Neutral"
@@ -35,8 +42,15 @@ help:
 	@echo "Setting up the Python environment (this happens once)..."
 	@$(UV) sync --extra dev
 
+# make dev LEARNED=laya also runs the optional learned detector (about 4 GB of memory;
+# see src/neutral/learned.py). Without it, the rules decide alone.
+LEARNED ?=
+
 dev: .venv
 	@$(UV) sync --extra dev --quiet
+	@if [ "$(LEARNED)" = "laya" ]; then \
+		echo "Adding Laya, the optional learned detector (a large download the first time)..."; \
+		$(UV) pip install --quiet laya; fi
 	@$(RUN) -m neutral.eval.cli doctor --offline --web
 	@echo ""
 	@echo "  Starting Neutral at http://127.0.0.1:8000  (press Ctrl-C to stop)"
@@ -82,7 +96,7 @@ deploy: .venv
 	@echo "Running the tests..."
 	@$(RUN) tools/run_tests.py
 	@echo ""
-	@echo "Deploying to neutralai.app. This takes a few minutes."
+	@echo "Deploying $(APP) to Fly. This takes a few minutes."
 	@flyctl deploy --remote-only --depot-scope=app --now || { \
 		echo ""; \
 		echo "  The deploy failed on Fly's side, not in this code - the tests passed."; \
@@ -90,7 +104,7 @@ deploy: .venv
 		echo "  Their status page: https://status.flyio.net"; \
 		echo ""; exit 1; }
 	@echo ""
-	@echo "  Live at https://neutralai.app"
+	@echo "  Live at $(SITE)"
 
 # Turns on password reset. Asks for the Resend key with typing hidden, so it never
 # appears on screen, in shell history, or anywhere it could be copied from - and hands
@@ -98,15 +112,15 @@ deploy: .venv
 email:
 	@command -v flyctl >/dev/null 2>&1 || { echo "  flyctl is not installed: brew install flyctl"; exit 1; }
 	@echo ""
-	@echo "  This needs a Resend account with neutralai.app verified as a sending domain."
+	@echo "  This needs a Resend account with your domain verified as a sending domain."
 	@echo "  If you have not done that yet, stop here (Ctrl-C) - see the steps in LIMITATIONS.md."
 	@echo ""
 	@printf "  Paste your Resend API key (nothing will show as you paste): "; \
 	stty -echo; read key; stty echo; echo ""; \
 	case "$$key" in re_*) ;; *) echo ""; echo "  That does not look like a Resend key - they start with re_. Nothing was changed."; exit 1;; esac; \
-	flyctl secrets set -a neutralai RESEND_API_KEY="$$key" NEUTRAL_MAIL_FROM="Neutral <noreply@neutralai.app>" \
+	flyctl secrets set -a $(APP) RESEND_API_KEY="$$key" NEUTRAL_MAIL_FROM="$(MAIL_FROM)" \
 	  && { echo ""; echo "  Done. Neutral restarts to pick this up, which signs everyone out once."; \
-	       echo "  Try it: https://neutralai.app/forgot"; echo ""; }
+	       echo "  Try it: $(SITE)/forgot"; echo ""; }
 
 clean:
 	@rm -rf .pytest_cache .ruff_cache reports/*.json reports/*.html

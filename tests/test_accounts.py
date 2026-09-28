@@ -424,7 +424,7 @@ class TestAutofillCannotChooseTheModel:
     later visit. A second account had "jack" saved the same way.
     """
 
-    EMAIL_IN_BOX = "zachary.wang1@sisyphus.website"
+    EMAIL_IN_BOX = "hiring.lead@example.com"
 
     def test_an_autofilled_box_that_was_never_ticked_is_ignored(self, client):
         """The failure exactly: box filled by the browser, box not ticked."""
@@ -526,7 +526,7 @@ class TestWhatCountsAsAModelName:
         assert looks_like_model(name)
 
     @pytest.mark.parametrize(
-        "name", ["zachary.wang1@sisyphus.website", "jack", "", "   ", "two words-1", "-x"]
+        "name", ["hiring.lead@example.com", "jack", "", "   ", "two words-1", "-x"]
     )
     def test_things_that_are_not_model_names_do_not(self, name):
         assert not looks_like_model(name)

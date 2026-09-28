@@ -19,6 +19,11 @@ primary_region = "sjc"   # San Jose - nearest region to California
 [env]
   NEUTRAL_PUBLIC = "true"
   NEUTRAL_ACCOUNTS_DB = "/data/accounts.db"
+  # Who runs this copy, shown on the terms and privacy pages. Change all three - and the
+  # app name above - if you are deploying your own.
+  NEUTRAL_OPERATOR = "Zachary R. Wang"
+  NEUTRAL_CONTACT = "zachary.wang1@sisyphus.website"
+  NEUTRAL_JURISDICTION = "the State of California, in the United States"
 
 # The disk that outlives deploys. Holds accounts.db and nothing else: no prompts, no
 # names, no API keys - see the reasoning in src/neutral/accounts.py.

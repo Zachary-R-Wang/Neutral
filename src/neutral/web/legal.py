@@ -16,16 +16,22 @@ placeholder and swallow the sentence around it.
 
 from __future__ import annotations
 
-# Replace these before the site is reachable by anyone else. They are rendered in a way
-# that is impossible to overlook, so the site cannot quietly go out with them in place.
+import os
+
+# Who runs this copy of Neutral, set per deployment - neutralai.app sets its own in
+# fly.toml. Anyone running their own copy sets theirs; until they do, the pages show the
+# placeholder in a way that is impossible to overlook, so a copy cannot quietly go out
+# naming someone else as responsible for it.
 #
-# Neutral is operated by an individual rather than a company, so OPERATOR is a person's
-# name. That is a fact about liability, not a formatting choice: there is no company
-# between him and a claim, which is part of why the banner in section S6 says this is
-# for evaluation and not for deciding anything about a real employee.
-OPERATOR = "Zachary R. Wang"
-CONTACT = "zachary.wang1@sisyphus.website"
-JURISDICTION = "the State of California, in the United States"
+# An operator may be an individual rather than a company. That is a fact about
+# liability, not a formatting choice: with no company between the operator and a claim,
+# the banner in section S6 saying this is for evaluation, not for deciding anything about
+# a real employee, matters all the more.
+OPERATOR = os.environ.get("NEUTRAL_OPERATOR", "").strip() or "[[the operator's name]]"
+CONTACT = os.environ.get("NEUTRAL_CONTACT", "").strip() or "[[a contact email address]]"
+JURISDICTION = (
+    os.environ.get("NEUTRAL_JURISDICTION", "").strip() or "[[the governing jurisdiction]]"
+)
 
 TERMS = f"""
 ## What this is

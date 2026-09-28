@@ -342,15 +342,53 @@ class TestTheLegalPages:
         assert "prompts and answers" in lowered
         assert "not saved to any file or database" in lowered
 
-    def test_the_real_pages_have_no_placeholders_left(self):
-        """The highlighting machinery is tested separately with a made-up page.
+    def _pages_with(self, monkeypatch, env: dict[str, str]):
+        import importlib
 
-        This one checks the actual pages that would go out. Now that Neutral is meant to
-        be reachable on a domain, an unfilled placeholder is a build failure rather than
-        a note to self.
-        """
-        for name, body in (("terms", TERMS), ("privacy", PRIVACY)):
+        from neutral.web import legal
+
+        for key in ("NEUTRAL_OPERATOR", "NEUTRAL_CONTACT", "NEUTRAL_JURISDICTION"):
+            monkeypatch.delenv(key, raising=False)
+        for key, value in env.items():
+            monkeypatch.setenv(key, value)
+        reloaded = importlib.reload(legal)
+        pages = reloaded.TERMS, reloaded.PRIVACY
+        monkeypatch.undo()
+        importlib.reload(legal)
+        return pages
+
+    def test_the_live_site_sets_who_operates_it(self):
+        """The operator's details moved out of the code on 2026-09-28, so that anyone can
+        run their own copy without it naming someone else. neutralai.app sets them in
+        fly.toml; if they go missing there, the live pages would show placeholders."""
+        import tomllib
+        from pathlib import Path
+
+        fly = tomllib.loads((Path(__file__).resolve().parent.parent / "fly.toml").read_text())
+        env = fly["env"]
+        for key in ("NEUTRAL_OPERATOR", "NEUTRAL_CONTACT", "NEUTRAL_JURISDICTION"):
+            assert env.get(key, "").strip(), f"fly.toml does not set {key}"
+
+    def test_configured_pages_have_no_placeholders_left(self, monkeypatch):
+        """With the operator's details set, as they are on a real deployment, nothing
+        unfilled goes out."""
+        terms, privacy = self._pages_with(
+            monkeypatch,
+            {
+                "NEUTRAL_OPERATOR": "A. Operator",
+                "NEUTRAL_CONTACT": "operator@example.com",
+                "NEUTRAL_JURISDICTION": "England and Wales",
+            },
+        )
+        for name, body in (("terms", terms), ("privacy", privacy)):
             assert "[[" not in body, f"the {name} page still has a placeholder in it"
+        assert "A. Operator" in terms and "operator@example.com" in privacy
+
+    def test_an_unconfigured_copy_shows_it_plainly(self, monkeypatch):
+        """Someone running their own copy without setting their details sees the gap
+        highlighted, rather than a stranger's name as the operator."""
+        terms, _ = self._pages_with(monkeypatch, {})
+        assert "[[the operator's name]]" in terms
 
     def test_the_pages_name_who_operates_it_and_how_to_reach_them(self):
         assert OPERATOR in TERMS
