@@ -26,6 +26,7 @@ import re
 import string
 from dataclasses import dataclass, field
 
+from neutral import learned
 from neutral.core import PolicyDecision, Segment, SegmentKind, Span, TransformRecord
 from neutral.detect import detect_names_local, find_pronouns
 from neutral.detect_attributes import detect_attributes
@@ -147,6 +148,10 @@ def _capitalise_sentences(segments, original: str):
             out[i] = Segment(kind, seg.source, fixed, seg.mechanism or person_neutralisation.NAME)
         text += out[i].text
     return tuple(out)
+
+
+# Laya's learned detector, where it is installed; otherwise None and the rules decide alone.
+self_presentation.DETECTOR = learned.detector()
 
 
 def _why(kind: str) -> str:

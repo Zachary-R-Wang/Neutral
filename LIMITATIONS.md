@@ -17,6 +17,13 @@ facts never move - but whether they matter is unknown.
 The subject swap is also narrow by design: about sixty verbs, simple sentences only. Most
 real sentences about two people fall outside it and are sent as written.
 
+## The learned detector is small and not yet live
+
+It was trained on 229 sentences written by the same author as the rules and the tests,
+and at its cut-off it catches about half of the self-presentation in its own training
+data (cross-validated) - it is tuned to be right, not to be thorough. On the live site it
+does not run at all until the server is upgraded; the rules decide alone.
+
 ## Whether a request asks for a verdict is decided by words
 
 Removing what the person asking says about their own stake, and turning "Is my X

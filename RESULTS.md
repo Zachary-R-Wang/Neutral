@@ -1,5 +1,19 @@
 # Results
 
+## Laya as a self-presentation detector — measured 2026-09-28
+
+Added to the rules, with the limits in DECISIONS.md. Broad set:
+
+| | built-against half: removed / kept | held-out half: removed / kept |
+|---|---|---|
+| Rules alone | 76 / 81, 90 / 90 | 33 / 42, 63 / 65 |
+| Rules + Laya | 76 / 81, 90 / 90 | **36 / 42, 63 / 65** |
+| Rules + word vectors | 77 / 81, 89 / 90 | 37 / 42, 61 / 65 |
+
+The held-out totals of all three were seen before the choice, which was made on the
+built-against half (where only the word-vector detector cost anything). Laya adds about
+60 ms per clause on a laptop. Not yet on the live site: see DECISIONS.md.
+
 ## Broad set: from 43% to 94% of what should go, removed — measured 2026-09-28
 
 90 prompts from everything people ask, split by a hash of their id. Mechanisms were built

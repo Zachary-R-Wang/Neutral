@@ -5,6 +5,41 @@ minds. Newest first.
 
 ---
 
+## 2026-09-28 — Laya, made to work: a learned detector for self-presentation
+
+**The instruction.** "If a mechanism is not effective, your first instinct should not be
+to throw it out. Your first instinct should be to actually make it effective."
+
+**What was wrong the first time.** Laya was asked, out of the box, whether a task needed a
+description - a subtle judgement it was never trained for, and it did worse than removing
+everything. That was the question's fault as much as the model's.
+
+**What it does now.** It recognises self-presentation - "I haven't slept in days working
+on this", "this is my baby" - which keyword rules cannot cover, because people say it in
+endless ways. Laya's encoder turns a clause into numbers; a logistic regression trained on
+229 labelled sentences (`train_self_presentation.yaml`, none from any test set) decides.
+Three limits make it safe:
+- it only ever adds to the rules, and only where the request asks for a verdict;
+- it may only remove a *statement* by the person asking - never a question, an
+  instruction, or a sentence about someone else (the first trial removed "Is this a good
+  idea?" and a sentence about an employee being reviewed);
+- its cut-off was chosen on the training data alone, as the lowest at which it is right
+  at least 95% of the time it says "remove". Losing part of the task is worse than
+  leaving a boast in.
+
+**Result, on the broad set's held-out half:** 33 -> 36 of 42 removed, 63 of 65 kept -
+nothing lost. On the half it was chosen on: no change either way. A detector on the word
+vectors Neutral already has scored higher in training but lost things that had to stay
+on both halves, so it was not chosen.
+
+**Not yet live.** Laya needs PyTorch and an 808 MB model; the server has 1 GB of memory.
+It is built in as optional (`learned.py`): where it is installed it runs, and elsewhere
+the rules decide alone. Running it on neutralai.app needs a larger machine, which costs
+more each month - the founder's decision. `tools/train_self_presentation.py` rebuilds
+the decision layer from the labelled sentences.
+
+---
+
 ## 2026-09-28 — A request for a verdict is asked without one
 
 **The instruction.** "Literally every single prompt imaginable gets insufficient changes."

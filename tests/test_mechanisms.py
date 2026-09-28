@@ -904,3 +904,43 @@ class TestTheBroadSetDoesNotSlideBack:
     def test_held_out(self):
         r = self._measure("test")
         assert r.removed.passed >= 33 and r.kept.passed >= 63
+
+
+class TestALearnedDetectorIsKeptOnALeash:
+    """Whatever a trained detector thinks, it may only take out a statement the person
+    asking makes about themselves. The first trial of Laya, without these limits, flagged
+    "Is this a good idea?" and a sentence about the employee being reviewed."""
+
+    def _with_detector_that_says_yes_to_everything(self, prompt):
+        from neutral.mechanisms import self_presentation
+
+        before = self_presentation.DETECTOR
+        self_presentation.DETECTOR = lambda clause: True
+        try:
+            return _text(prompt)
+        finally:
+            self_presentation.DETECTOR = before
+
+    def test_a_question_is_never_removed(self):
+        out = self._with_detector_that_says_yes_to_everything(
+            "The plan is to open two shops. Is this a good idea?"
+        )
+        assert "idea" in out
+
+    def test_a_sentence_about_someone_else_is_never_removed(self):
+        out = self._with_detector_that_says_yes_to_everything(
+            "Rate this review. She closed 40 deals this year."
+        )
+        assert "40 deals" in out
+
+    def test_the_askers_own_statement_can_be(self):
+        out = self._with_detector_that_says_yes_to_everything(
+            "Rate the essay below. I haven't slept in days working on it."
+        )
+        assert "slept" not in out
+
+    def test_it_can_be_switched_off(self, monkeypatch):
+        from neutral import learned
+
+        monkeypatch.setenv("NEUTRAL_LEARNED", "off")
+        assert learned.detector() is None

@@ -49,6 +49,11 @@ EMOTION, EFFORT, STANCE, CREDENTIAL, SOCIAL, IDEOLOGY, OWNERSHIP = (
     "ownership",
 )
 RESTRUCTURED = "restructured"
+LEARNED = "learned"
+
+# A trained detector, consulted for a clause the rules have no word for. None until one is
+# configured (see neutral/learned.py); the rules decide alone without it.
+DETECTOR = None
 
 REASONS = {
     EMOTION: "how the person asking feels about it invites a kinder verdict",
@@ -59,6 +64,7 @@ REASONS = {
     IDEOLOGY: "the person asking's politics invites an answer tailored to them",
     OWNERSHIP: "which one belongs to the person asking invites favouritism",
     RESTRUCTURED: "the same content, no longer framed as the person asking's own view",
+    LEARNED: "a trained detector judged this to be about the person asking, not the task",
 }
 
 _ADV = (
@@ -229,7 +235,31 @@ def _kind(clause: str) -> str | None:
             return kind
     if _OWNERSHIP.fullmatch(" " + body):
         return OWNERSHIP
+    if DETECTOR is not None and _statement(body) and DETECTOR(clause.strip()):
+        return LEARNED
     return None
+
+
+# A trained detector may only take out a statement. Self-presentation is something said
+# about oneself; a question or an instruction is the task, whatever it sounds like.
+_REQUEST_START = re.compile(
+    r"^(?:rate|review|critique|tell|give|evaluate|assess|check|help|write|summari[sz]e|"
+    r"explain|grade|score|judge|rank|compare|point|suggest|list|draft|improve|fix|rewrite|"
+    r"proofread|edit|translate|should|can|could|would|will|is|are|am|was|were|do|does|did|"
+    r"what|how|who|which|why|where|when|please|let|be\s+honest)\b"
+)
+
+
+_FIRST_PERSON = re.compile(r"\b(?:i|i'm|i've|i'd|i'll|me|my|mine|myself)\b")
+
+
+def _statement(body: str) -> bool:
+    """A statement, by the person asking, about themselves or what they have heard."""
+    return (
+        not body.rstrip().endswith("?")
+        and not _REQUEST_START.match(body)
+        and _FIRST_PERSON.search(body) is not None
+    )
 
 
 # Restatements. Each finds the framing at the start of a clause; only the framing is

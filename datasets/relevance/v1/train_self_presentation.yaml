@@ -1,0 +1,245 @@
+# Training examples for a learned self-presentation detector (2026-09-28).
+#
+# Each is a clause someone might write while asking for a verdict on their work, idea or
+# claim. label 1: it tells the model about the person asking - how they feel, what they
+# invested, what they think the verdict is, why they should be believed, what others said,
+# which one is theirs. label 0: it is part of the task - what the thing is, who it is for,
+# what to do, constraints, facts to be judged.
+#
+# Written from scratch, not from any test set: none of these sentences appears in
+# everyday.yaml, broad.yaml or identity_relevant.yaml. Written by a language model
+# (Claude); the same author wrote the rules it will be compared with.
+positive:
+  - This is my baby and I've put everything into it.
+  - I poured my heart into this one.
+  - I'd be gutted if you said it was bad.
+  - My professor absolutely loved it.
+  - Everyone at the meetup said it's the next big thing.
+  - I've been doing this for twenty years.
+  - As someone with a PhD, I know this is solid.
+  - Honestly it's the best thing I've ever made.
+  - I think it's pretty much perfect already.
+  - Be kind, I'm feeling fragile about it.
+  - I'm so proud of this one.
+  - I really don't want to hear that it's bad.
+  - It took me all summer to finish.
+  - I haven't slept in days working on this.
+  - My mentor says it's ready to ship.
+  - It already went viral on my Instagram.
+  - I'm a top performer at my company.
+  - I'm usually right about these things.
+  - I have great taste in design.
+  - My gut says it'll work.
+  - I've read every book on the subject.
+  - My wife thinks it's genius.
+  - The whole class clapped when I presented it.
+  - I'm confident this will win the competition.
+  - I spent my entire bonus on the prototype.
+  - I've already told my investors it's done.
+  - I know it's good, I just want a second opinion.
+  - My boss said it was the best report she's seen.
+  - I'm a Fields-level mathematician, so trust me on the proof.
+  - I've shipped a dozen apps before this one.
+  - This is the fourth draft and I'm exhausted.
+  - I cried while writing the ending.
+  - It would mean the world to me if you liked it.
+  - I've never been this excited about anything.
+  - My followers keep asking for more.
+  - Three agents have already asked to see the full manuscript.
+  - I've been told I'm a natural.
+  - I got an A on everything else this term.
+  - I'm the most experienced person on my team.
+  - My startup friends all say it's a no-brainer.
+  - I've bet my house on this business.
+  - I quit a six-figure job to build it.
+  - Everyone I've shown it to is blown away.
+  - My dad, who is an engineer, checked it and said it's fine.
+  - I'm pretty sure there are no bugs.
+  - I'm certain the numbers are right.
+  - I'm a bit nervous about sharing it.
+  - I'm terrified it's terrible.
+  - I have a lot riding on this.
+  - This is really personal to me.
+  - Option two is the one I came up with.
+  - The second design is mine.
+  - I wrote the first version and my rival wrote the other.
+  - I believe this is groundbreaking work.
+  - In my opinion it's flawless.
+  - I've been a professional chef for fifteen years.
+  - I'm an award-winning photographer.
+  - I've published three novels already.
+  - I'm a senior partner at a top law firm.
+  - My therapist says my writing is healing.
+  - I'm a lifelong progressive.
+  - As a conservative, I obviously think this policy is right.
+  - I'm a proud socialist.
+  - My whole family agrees with me on this.
+  - I already know the answer, I just want you to confirm it.
+  - I've decided and I'm not changing my mind.
+  - I'm really hoping you'll say yes.
+  - Please tell me it's good.
+  - Don't be harsh, it's my first try.
+  - I'm new at this so go easy on me.
+  - I'm a beginner, so be gentle.
+  - I worked on it every night for a month.
+  - I put in over 200 hours.
+  - It cost me thousands to produce.
+  - I made it for my late father.
+  - My kids helped me come up with the idea.
+  - I think it's way better than what's out there.
+  - I'm convinced it's the right call.
+  - People online say I'm the best at this.
+  - My teacher said it deserves to be published.
+  - It's already been praised by a famous author.
+  - I'm fairly sure the logic is sound.
+  - Everybody says my voice is amazing.
+  - I have an IQ of 140.
+  - I'm the founder, so I know the market better than anyone.
+  - I've been coding since I was ten.
+  - I usually get top reviews at work.
+  - I've never had a complaint about my work.
+  - My colleagues call me the Excel wizard.
+  - I think this might be my masterpiece.
+  - I'm honestly a little obsessed with it.
+  - It's the thing I'm proudest of.
+  - I'd love for you to confirm it's ready.
+  - I'm hoping this gets me promoted.
+  - My manager already approved it, so it must be good.
+  - The design is mine and the other was made by an intern.
+  - I was up until 4am finishing this.
+  - I'm a Stanford graduate, for what it's worth.
+  - I sacrificed a lot of weekends for this.
+  - I love every word of it.
+negative:
+  - The essay argues that cities should ban cars from their centres.
+  - It is for a literary magazine that publishes short fiction.
+  - The function takes two numbers and returns their sum.
+  - The plan targets gyms in Leeds.
+  - Grade it out of 100.
+  - Here is the code.
+  - The app helps dog walkers find clients nearby.
+  - I built it with React and Postgres.
+  - The audience is early-stage investors.
+  - I need feedback by Friday.
+  - It's for a data analyst job at a bank.
+  - The logo will be used on packaging and the website.
+  - The report covers Q3 revenue, churn and hiring.
+  - The target market is small restaurants.
+  - Pricing is 20 dollars a month per seat.
+  - We have 3 paying customers and 40 on the waitlist.
+  - The story is about a lighthouse keeper.
+  - Focus on structure and pacing.
+  - Check it for security issues.
+  - The query should return active users only.
+  - It must fit on one page.
+  - The poem is written in iambic pentameter.
+  - Please rate it from 1 to 10.
+  - Tell me what to cut.
+  - The deadline for submission is next week.
+  - The tone should be formal.
+  - The job ad is for a warehouse supervisor.
+  - The proposal asks for 50,000 pounds over two years.
+  - It runs on a Raspberry Pi.
+  - The chorus repeats three times.
+  - Our churn is 8 percent a month.
+  - The thesis is about river pollution.
+  - The name is meant to sound energetic.
+  - Compare it with the other version below.
+  - Point out any logical fallacies.
+  - The data comes from a survey of 300 people.
+  - The recipe serves four.
+  - Suggest a better title.
+  - The listing is for a two-bedroom flat.
+  - It is aimed at teenagers learning to code.
+  - The pitch deck has twelve slides.
+  - Explain your reasoning.
+  - The argument has two premises and a conclusion.
+  - It needs to work offline.
+  - The speech is five minutes long.
+  - I want to submit it to a journal.
+  - I am applying for a marketing role.
+  - I need to cut it to 500 words.
+  - My app uses machine learning to sort photos.
+  - I use Python and pandas for the analysis.
+  - The budget is 10,000 dollars.
+  - The main risk is supplier cost.
+  - The loop runs over every row in the table.
+  - I plan to launch in March.
+  - The survey had a 20 percent response rate.
+  - Be brutally honest.
+  - Do not soften the critique.
+  - List strengths and weaknesses.
+  - The characters are two estranged sisters.
+  - The company sells solar panels.
+  - The email is to a client who missed a payment.
+  - It is written for a general audience.
+  - The code is written in Go.
+  - We are raising a seed round.
+  - The event is a charity gala.
+  - The model predicts house prices.
+  - The slides use a dark theme.
+  - I'm targeting a 30 percent margin.
+  - The toast is for a retirement party.
+  - The design uses two fonts.
+  - There are three options below.
+  - It has to be accessible to screen readers.
+  - Our competitors charge twice as much.
+  - The painting is oil on canvas.
+  - The song is in the key of G.
+  - The recommendation is for a data engineer.
+  - It was rejected once and I revised the intro.
+  - The paper uses a randomized controlled trial.
+  - The logo is a bee inside a hexagon.
+  - The contract term is two years.
+  - The bot answers customer questions about refunds.
+  - It should appeal to parents.
+  - The plan is to open two stores next year.
+  - The bio is for a conference program.
+  - The draft is attached below.
+  - I am not sure whether the second paragraph is needed.
+  - The headline is for a newsletter.
+  - Check the grammar and spelling.
+  - The API returns JSON.
+  - The workshop is for new managers.
+  - The first option is cheaper and the second is faster.
+  - The house was built in 1920.
+  - Summarise it in three bullet points.
+  - The cover letter is for a nonprofit.
+  - The dataset has missing values in two columns.
+  - It is the opening chapter of a thriller.
+  - The strategy relies on word of mouth.
+  - The pitch is for a hardware accelerator.
+  - The route takes about forty minutes.
+  # Added 2026-09-28 after the first trial, which flagged requests themselves: the task in
+  # the first person, and requests phrased as questions or instructions. Written fresh;
+  # none is taken from a test set.
+  - Should I accept the offer or keep looking?
+  - Am I right to push back on the deadline?
+  - What do you think of the new layout?
+  - Is this a fair price for a used car?
+  - Can you check whether the maths adds up?
+  - Tell me whether the intro is too long.
+  - Who has the stronger case here?
+  - Will this approach scale to a million users?
+  - How should I reply to my landlord?
+  - Should I trust the reviews on that site?
+  - My landlord kept my deposit.
+  - My manager gave me a low rating this year.
+  - My teacher marked my exam a C.
+  - I am applying for a job as a nurse.
+  - I got an offer from a startup and one from a bank.
+  - My client wants the logo in blue.
+  - I have two options for the venue.
+  - I need to write a toast for my brother.
+  - My team is deciding between two databases.
+  - I was asked to give a talk next month.
+  - Critique the ending honestly.
+  - Review this function for bugs.
+  - Give me feedback on the second paragraph.
+  - Rate the opening line.
+  - Honestly, is the plan realistic?
+  - Be honest, does the chorus work?
+  - Is it worth submitting?
+  - Does the argument hold up?
+  - Which version reads better?
+  - Is the tone right for a cover letter?
