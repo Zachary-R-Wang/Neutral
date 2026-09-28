@@ -5,10 +5,56 @@ minds. Newest first.
 
 ---
 
-## 2026-09-27 — OPEN: a decision model (Laya) as the relevance gate
+## 2026-09-28 — Descriptions of people are removed, and rules - not Laya - decide when
 
-**Status: proposed, waiting for the founder.** CLAUDE.md §4 and §10: a dependency that
-changes the architecture is written up here first, and not added until approved.
+**The instruction.** "The big problem is not that the mechanisms are bad, but that you
+simply aren't using them... for 19/20 prompts nothing changes." The founder's example,
+"20 best questions to ask as a philosopher to an 18 year old model and lifestyle content
+creator in an interview", went through untouched.
+
+**Why.** Neutral only acted on names, gendered pronouns and "I". Most prompts people
+type carry identity in a description instead: an age, "female", "Nigerian", "a mom". A
+set of 26 such prompts, labelled before any code was written, confirmed it: 7 were
+changed at all, and those only because of an "I"; none of 29 descriptions was removed.
+
+**What was built.** Mechanism 1 now also finds descriptions of a person - age, gender
+words, family roles, nationality, ethnicity, race, religion, sexual orientation - but
+only where they describe a person ("a young founder", not "a young company"). A gendered
+noun becomes its neutral counterpart ("woman" -> "person", "mom" -> "parent"), so the
+relationship survives; everything else is removed, with the article corrected ("an 18
+year old model" -> "a model"). Removing is all it does, so S1 holds by construction.
+
+The relevance gate (Phase 2) decides, for each one, whether the task needs it. It also
+now covers names, pronouns and the first person: "How do I pronounce Siobhan Ní
+Bhriain?" and "Translate: I am proud of my team" are left alone.
+
+**Results** (`make relevance`, no model called): everyday prompts changed 7 -> 20 of 26;
+descriptions removed 0 -> 28 of 29; things the task needs kept 42 of 43; the
+identity-is-the-question set 1 -> 16 of 16; matched evaluation pairs that become
+identical 44 -> 52 of 70. The rules were written alongside these sets, so these are not
+held-out numbers - see LIMITATIONS.md.
+
+**Laya was tried, and is not used.** With the founder's approval it was downloaded and
+asked the pre-registered question for all 44 labelled descriptions. It kept none of the
+8 that had to stay - it would have removed "Black" from a question about a police stop
+and the age from a question about age discrimination law - and kept "30 year old Chinese
+woman" in a question about a difficult boss. Overall 28 of 44 right, against 36 for
+removing everything and 43 for the rules. Its own documentation says the base model is
+near chance until it is trained on examples, and that is what this looked like. It ran
+in about 60 ms per question on a laptop, so speed was never the problem.
+
+**What would change our minds.** Laya trained on a few hundred labelled decisions -
+which the audit log is designed to produce - could beat keyword rules on the prompts the
+rules have no word for. The gate is one function behind `NEUTRAL_GATE`; trying a trained
+model is a configuration change and a measurement, not a rebuild. Until then, Laya is not
+installed on the server and nothing depends on it.
+
+---
+
+## 2026-09-27 — Superseded: a decision model (Laya) as the relevance gate
+
+**Status: tried on 2026-09-28 and not adopted; see the entry above.** Kept for the
+reasoning.
 
 **The instruction.** "Use a decision model like Laya to predict biases and send to model
 instead."

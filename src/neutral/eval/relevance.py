@@ -7,6 +7,9 @@ nothing and call no model:
               the model exactly as written.
   relevant    prompts where the identity IS the question ("how do I pronounce..."). The
               listed text must survive word for word, or the question has changed.
+  everyday    prompts like the ones people type, where identity is carried by a
+              description ("a 58-year-old", "female", "Nigerian"), labelled with what
+              should go and what must stay.
   irrelevant  the evaluation dataset's own prompts, where identity is by construction not
               relevant to the task. The name or pronoun that varies should be gone.
 
@@ -158,12 +161,44 @@ def measure_irrelevant(dataset_dir: Path) -> tuple[SetResult, SetResult]:
     return removable, not_handled
 
 
+def _present(phrase: str, text: str) -> bool:
+    return re.search(rf"(?<!\w){re.escape(phrase)}(?!\w)", text, re.I) is not None
+
+
+def measure_everyday(path: Path) -> tuple[SetResult, SetResult, SetResult]:
+    """How often Neutral changes an ordinary prompt at all, and whether it is right to.
+
+    Three views of one set: whether anything changed; each thing that should have gone;
+    each thing that had to stay.
+    """
+    changed = SetResult("everyday", "the prompt was changed at all")
+    removed = SetResult("  removed", "each description the task does not need is gone")
+    kept = SetResult("  kept", "each thing the task needs is still there")
+    for item in load_set(path):
+        done = rewrite(item["prompt"])
+        changed.outcomes.append(
+            Outcome(item["id"], done.changed, item["why"], done.processed, "nothing changed")
+        )
+        for phrase in item.get("remove") or []:
+            gone = not _present(phrase, done.processed)
+            removed.outcomes.append(
+                Outcome(item["id"], gone, item["why"], done.processed, f"still there: {phrase!r}")
+            )
+        for phrase in item.get("keep") or []:
+            there = phrase in done.processed
+            kept.outcomes.append(
+                Outcome(item["id"], there, item["why"], done.processed, f"lost: {phrase!r}")
+            )
+    return changed, removed, kept
+
+
 def measure_all(root: Path) -> list[SetResult]:
     labelled = root / "datasets" / "relevance" / "v1"
     removable, not_handled = measure_irrelevant(root / "datasets" / "v1")
     return [
         measure_safety(labelled / "safety_heldout.yaml"),
         measure_relevant(labelled / "identity_relevant.yaml"),
+        *measure_everyday(labelled / "everyday.yaml"),
         removable,
         not_handled,
     ]

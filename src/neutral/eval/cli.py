@@ -513,7 +513,7 @@ def show_relevance(args: argparse.Namespace) -> int:
     for r in results:
         print(f"  {r.passed:>3} / {r.total:<3} {r.name:<14} {r.meaning}")
     for r in results:
-        if r.failures and (args.all or r.name in ("safety", "relevant")):
+        if r.failures and (args.all or r.name in ("safety", "relevant", "  removed", "  kept")):
             print(f"\n  {r.name}: not as expected")
             for o in r.failures:
                 print(f"    {o.id}  {o.why} - {o.detail}")

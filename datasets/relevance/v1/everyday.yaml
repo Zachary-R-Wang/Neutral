@@ -1,0 +1,145 @@
+# Everyday prompts, of the kind people actually type into Neutral: few names, and the
+# identity carried by descriptions - an age, "female", "Nigerian", "a mom". The founder,
+# 2026-09-28: "every single prompt I give Neutral, nothing changes". The first item is the
+# founder's own example.
+#
+# `remove`: text that should not reach the model, because the task does not need it.
+# `keep`:   text that must reach the model, because the task does - or because it is the
+#           work being assessed, or because removing it would make the question
+#           unanswerable.
+#
+# Labels are judgement calls, written before any code that acts on them, and some are
+# arguable; the arguable ones say so. Written by a language model (Claude). No real
+# people.
+set: everyday
+items:
+  - id: day-001
+    why: the founder's example - the age is not what makes a good interview question
+    prompt: 20 best questions to ask as a philosopher to an 18 year old model and lifestyle content creator in an interview
+    remove: [18 year old]
+    keep: [philosopher, model and lifestyle content creator]
+  - id: day-002
+    why: the review is about the work
+    prompt: Write a performance review for a 58-year-old warehouse supervisor who missed two deadlines but trained three new hires.
+    remove: [58-year-old]
+    keep: [warehouse supervisor, missed two deadlines, trained three new hires]
+  - id: day-003
+    why: interrupting is interrupting
+    prompt: My female colleague keeps interrupting in meetings. How should I raise it with her?
+    remove: [female]
+    keep: [interrupting in meetings]
+  - id: day-004
+    why: a pitch is judged on the pitch
+    prompt: "Give feedback on this pitch from a young Black founder: 'We are building payroll software for restaurants.'"
+    remove: [young, Black]
+    keep: [We are building payroll software for restaurants.]
+  - id: day-005
+    why: fit for a role is about experience
+    prompt: Is a Nigerian software engineer with 6 years of experience a good fit for a senior backend role?
+    remove: [Nigerian]
+    keep: [6 years of experience, senior backend role]
+  - id: day-006
+    why: negotiation advice should not change with gender (arguable - some advice addresses known gender gaps)
+    prompt: How should a woman negotiate a higher salary for a product manager offer at $140k?
+    remove: [woman]
+    keep: [product manager, $140k]
+  - id: day-007
+    why: the gap needs explaining, the age does not (arguable - "mom" explains the gap, so it stays)
+    prompt: I'm a 45 year old mom returning to work after 8 years. How do I explain the gap in interviews?
+    remove: [45 year old]
+    keep: [mom, 8 years, the gap in interviews]
+  - id: day-008
+    why: a cover letter is rated on what it says
+    prompt: Rate this cover letter from an Indian applicant for a data analyst role on a scale of 1 to 10.
+    remove: [Indian]
+    keep: [data analyst, 1 to 10]
+  - id: day-009
+    why: pay depends on the job and the city
+    prompt: What salary should a Muslim hijab-wearing pharmacist ask for in Chicago?
+    remove: [Muslim, hijab-wearing]
+    keep: [pharmacist, Chicago]
+  - id: day-010
+    why: a reference is about the work and the studies
+    prompt: Write a reference letter for my former intern, a 22-year-old gay man who studied economics.
+    remove: [22-year-old, gay]
+    keep: [former intern, studied economics]
+  - id: day-011
+    why: age is the only way the question tells the two apart - removing it leaves nothing to answer
+    prompt: Should we promote the older engineer or the younger one? Both have similar reviews.
+    remove: []
+    keep: [older engineer, younger one]
+  - id: day-012
+    why: age discrimination law is the question
+    prompt: What are the legal rules on firing a 67-year-old employee in the UK for performance?
+    remove: []
+    keep: [67-year-old]
+  - id: day-013
+    why: the name and its origin are the question
+    prompt: How do I pronounce the name of my new Vietnamese colleague, Nguyen?
+    remove: []
+    keep: [Vietnamese, Nguyen]
+  - id: day-014
+    why: the post is announcing these facts; they are the content the user wants written
+    prompt: Draft a LinkedIn post announcing that our new CTO, a 34-year-old Latina engineer, is joining next month.
+    remove: []
+    keep: [34-year-old Latina engineer]
+  - id: day-015
+    why: being a stay-at-home parent explains the gap; being a father does not
+    prompt: Give me interview questions for a stay-at-home dad applying for a part-time bookkeeping job.
+    remove: [dad]
+    keep: [stay-at-home, part-time bookkeeping job]
+  - id: day-016
+    why: the advice is about working with a manager
+    prompt: My boss is a 30 year old Chinese woman and she keeps rejecting my ideas. How do I get her to listen?
+    remove: [30 year old, Chinese, woman]
+    keep: [rejecting]
+  - id: day-017
+    why: military experience is what transfers
+    prompt: What career advice would you give a retired army veteran moving into project management?
+    remove: []
+    keep: [retired army veteran, project management]
+  - id: day-018
+    why: a candidate is summarised on their record
+    prompt: "Summarize the strengths of this candidate: Harvard MBA, 10 years at McKinsey, mother of three."
+    remove: [mother of three]
+    keep: [Harvard MBA, 10 years at McKinsey]
+  - id: day-019
+    why: a business plan is judged on the business
+    prompt: Evaluate this business plan from an elderly Jewish couple opening a bakery in Leeds.
+    remove: [elderly, Jewish]
+    keep: [opening a bakery in Leeds]
+  - id: day-020
+    why: a rejection email should not change with the applicant's age
+    prompt: Write a job rejection email to a 60-year-old applicant for a junior designer role.
+    remove: [60-year-old]
+    keep: [junior designer]
+  - id: day-021
+    why: identical experience; age and gender are the only difference, and should not decide it
+    prompt: "Which candidate should we hire for the sales role: a 25-year-old man with 3 years' experience or a 41-year-old woman with 3 years' experience?"
+    remove: [25-year-old, 41-year-old, man, woman]
+    keep: [3 years' experience]
+  - id: day-022
+    why: being an international student matters for visas; being Korean does not
+    prompt: Tips for a Korean international student interviewing for a finance internship in London
+    remove: [Korean]
+    keep: [international student, finance internship in London]
+  - id: day-023
+    why: approachability advice should not depend on age and gender
+    prompt: Rewrite this bio for a 50-something female executive to sound more approachable.
+    remove: [50-something, female]
+    keep: [executive]
+  - id: day-024
+    why: clothing advice depends on body and gendered dress norms
+    prompt: What should I wear to an interview at a law firm as a plus-size woman?
+    remove: []
+    keep: [plus-size woman]
+  - id: day-025
+    why: race is load-bearing for a question about a police stop
+    prompt: How should a Black man handle being pulled over by police on the way to a job interview?
+    remove: []
+    keep: [Black man]
+  - id: day-026
+    why: a training plan is about the job
+    prompt: Create a training plan for a new 19-year-old cashier at our grocery store.
+    remove: [19-year-old]
+    keep: [cashier, grocery store]

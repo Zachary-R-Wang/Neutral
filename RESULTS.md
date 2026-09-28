@@ -1,5 +1,34 @@
 # Results
 
+## Neutral now changes most everyday prompts — measured 2026-09-28
+
+| `make relevance` | Before | After |
+|---|---|---|
+| Everyday prompts changed at all | 7 / 26 | 20 / 26 |
+| Descriptions the task does not need, removed | 0 / 29 | 28 / 29 |
+| Things the task needs, kept | 41 / 43 | 42 / 43 |
+| Identity is the question, left alone | 1 / 16 | 16 / 16 |
+| Evaluation pairs that become identical | 44 / 70 | 52 / 70 |
+
+The founder's complaint was that nothing changed. It was true: descriptions of a person
+were never touched. Of the six everyday prompts still sent as written, four are ones
+where the description is needed (the law, a police stop, clothing, an announcement), one
+is held by the safety rules ("student"), and one has nothing to change.
+
+**These are in-sample numbers.** The rules were written alongside the sets. The honest
+test is prompts nobody wrote the rules for.
+
+**Laya, the decision model, did worse than removing everything:**
+
+| Deciding which of 44 labelled descriptions the task needs | Right | Kept, of 8 that must stay | Removed, of 36 that should go |
+|---|---|---|---|
+| Keyword rules | 43 | 7 | 36 |
+| Laya, unchanged, threshold 0.5 | 28 | 0 | 28 |
+| Remove everything | 36 | 0 | 36 |
+
+Laya's probabilities barely tracked the labels. It is not used; DECISIONS.md has why and
+what would change that.
+
 ## The safety hold missed most safety-relevant prompts — measured 2026-09-28
 
 `make relevance` runs Neutral over labelled prompts without calling any model, and
@@ -292,6 +321,9 @@ different than they are. Named `lexical` rather than `semantic` for that reason.
 
 **The dataset was written by a language model.** Reviewed by hand, but no external claim
 should rest on it until pairs exist that were authored independently.
+
+**Descriptions are decided by keyword rules written alongside their tests.** 20 of 26
+everyday prompts changed is an in-sample number.
 
 **The safety set is no longer held out.** Its first run caught 7 of 26; the rules were
 then changed until it passed. The second number says nothing about prompts outside it.

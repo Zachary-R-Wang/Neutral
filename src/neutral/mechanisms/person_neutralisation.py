@@ -263,6 +263,26 @@ def _agreeing(subject) -> list:
     return found
 
 
+def _asks_the_assistant(me) -> bool:
+    """Whether this "me" is only the receiver of a request to the assistant.
+
+    "Give me interview questions", "Tell me what to say", "Can you help me with this?" -
+    the "me" says nothing about who the person is; it is how anyone asks for anything.
+    Turned into "Give Person A interview questions" it only made the prompt stranger.
+    """
+    verb = me.head
+    if verb.dep_ == "prep":  # "write this for me"
+        verb = verb.head
+    if me.dep_ == "nsubj" and verb.dep_ in ("ccomp", "xcomp"):
+        verb = verb.head  # "help me write", "let me know": the request is the outer verb
+    if verb.pos_ not in ("VERB", "AUX"):
+        return False
+    subjects = [c for c in verb.children if c.dep_ in ("nsubj", "nsubjpass") and c != me]
+    if subjects:
+        return all(s.lower_ == "you" for s in subjects)
+    return verb.tag_ == "VB" and not any(c.dep_ in ("aux", "auxpass") for c in verb.children)
+
+
 def _first_person_refs(
     prompt: str, protected: list[Span], referent: str, possessive: str
 ) -> list[PersonRef] | None:
@@ -303,6 +323,8 @@ def _first_person_refs(
         if low in ("my", "mine"):
             add(start, end, _cased(possessive, capital), "first_person")
         elif low == "me":
+            if _asks_the_assistant(token):
+                continue
             add(start, end, _cased(referent, capital), "first_person")
         elif low == "myself":
             if token.dep_ in ("dobj", "pobj", "dative", "attr"):

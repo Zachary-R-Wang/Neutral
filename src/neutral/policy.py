@@ -30,7 +30,7 @@ from neutral.core import PolicyDecision
 from neutral.detect import Finding
 
 POLICY_NAME = "hr-default"
-POLICY_VERSION = "v1"
+POLICY_VERSION = "v2"
 
 # An age below this, stated anywhere in the prompt, stops Neutral entirely.
 ADULT_AGE = 18
@@ -327,6 +327,18 @@ def decide(prompt: str, findings: list[Finding]) -> list[PolicyDecision]:
     """One decision per detected span, with the reason recorded either way."""
     hold = safety_hold(prompt)
 
+    from neutral import gate
+    from neutral.detect_attributes import ATTRIBUTE_KINDS
+
+    # Descriptions of a person go through the relevance gate; names and pronouns are
+    # still substituted wherever they appear (see "Phase 2" in DECISIONS.md).
+    described = [f for f in findings if f.kind in ATTRIBUTE_KINDS]
+    verdict = (
+        {}
+        if hold.held
+        else dict(zip(map(id, described), gate.verdicts(prompt, described), strict=True))
+    )
+
     decisions = []
     for finding in findings:
         if hold.held:
@@ -340,18 +352,30 @@ def decide(prompt: str, findings: list[Finding]) -> list[PolicyDecision]:
                     safety_hold=True,
                 )
             )
-        else:
+        elif id(finding) in verdict:
+            v = verdict[id(finding)]
             decisions.append(
                 PolicyDecision(
                     detected=finding.text,
                     detected_kind=finding.kind,
                     source=finding.span,
-                    transform_allowed=True,
+                    transform_allowed=not v.needed,
                     reason=(
-                        f"Phase 1 policy {POLICY_NAME}/{POLICY_VERSION}: every detected "
-                        f"name is substituted, with no relevance gate yet. No safety "
-                        f"signal was present in this prompt."
+                        f"Policy {POLICY_NAME}/{POLICY_VERSION}, {gate.gate_name()} gate: "
+                        f"{v.reason}."
                     ),
+                    safety_hold=False,
+                )
+            )
+        else:
+            v = gate.identity_verdict(prompt, finding.kind)
+            decisions.append(
+                PolicyDecision(
+                    detected=finding.text,
+                    detected_kind=finding.kind,
+                    source=finding.span,
+                    transform_allowed=not v.needed,
+                    reason=f"Policy {POLICY_NAME}/{POLICY_VERSION}: {v.reason}.",
                     safety_hold=False,
                 )
             )

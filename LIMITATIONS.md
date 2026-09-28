@@ -17,6 +17,29 @@ facts never move - but whether they matter is unknown.
 The subject swap is also narrow by design: about sixty verbs, simple sentences only. Most
 real sentences about two people fall outside it and are sent as written.
 
+## The rules that decide what a task needs were written alongside the tests
+
+Neutral now removes descriptions like "a 58-year-old" or "Nigerian" unless the request
+is about that kind of thing - the law, a name, clothes, a police stop, an announcement.
+Those exceptions are keyword rules, and they were written with the everyday and
+identity-relevant test sets in view. On those sets they are nearly perfect; on prompts
+nobody has thought of, they will be worse, by an amount no one has measured. The only
+honest test is prompts written by someone else. Real prompts from real use are best.
+
+Two consequences follow from rules working on words. A request that needs an attribute
+without naming the domain ("what should I get my wife for her birthday?" - "wife" becomes
+"spouse") loses something. And a request that mentions the law in passing keeps every
+description in it.
+
+What is not caught at all: origin stated as a phrase ("she's from Lagos", "born in
+India"), appearance ("attractive", "overweight"), class and schooling markers, seniority,
+and length of career. Descriptions are not put back into the answer: the model says "the
+person" or "your spouse", and the answer reads that way.
+
+A safety rule holds any prompt containing "student", because a student can be a child.
+University students are mostly adults, so prompts about them are sent unchanged. That is
+the direction S3 says to be wrong in.
+
 ## Talking about yourself in the third person is itself unusual
 
 Nobody writes "Should Person B tell Person B's manager?" about somebody else either. A

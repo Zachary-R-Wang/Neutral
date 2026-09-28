@@ -560,3 +560,125 @@ class TestTheyIsGrammatical:
         thought they were, "She takes the blame" came out as "take They the blame"."""
         out = _text("Priya Raman mentored Greg Miller. She trains him and he thanks her.")
         assert out.endswith("They train them and they thank them.")
+
+
+# ---------------------------------------------------------------------------
+# Descriptions of a person, and the gate that decides whether the task needs them
+# ---------------------------------------------------------------------------
+
+
+class TestDescriptionsAreTakenOut:
+    """The founder, 2026-09-28: "every single prompt I give Neutral, nothing changes".
+    Most prompts carry identity in a description, not a name."""
+
+    @pytest.mark.parametrize(
+        ("asked", "sent"),
+        [
+            (
+                "20 best questions to ask as a philosopher to an 18 year old model and "
+                "lifestyle content creator in an interview",
+                "20 best questions to ask as a philosopher to a model and lifestyle content "
+                "creator in an interview",
+            ),
+            (
+                "Is a Nigerian software engineer with 6 years of experience a good fit?",
+                "Is a software engineer with 6 years of experience a good fit?",
+            ),
+            (
+                "Rewrite this bio for a 50-something female executive.",
+                "Rewrite this bio for an executive.",
+            ),
+            (
+                "What salary should a Muslim hijab-wearing pharmacist ask for in Chicago?",
+                "What salary should a pharmacist ask for in Chicago?",
+            ),
+            (
+                "Evaluate this business plan from an elderly Jewish couple.",
+                "Evaluate this business plan from a couple.",
+            ),
+            (
+                "How should a woman negotiate a higher salary?",
+                "How should a person negotiate a higher salary?",
+            ),
+            (
+                "Interview questions for a stay-at-home dad applying to be a bookkeeper.",
+                "Interview questions for a stay-at-home parent applying to be a bookkeeper.",
+            ),
+            ("A customer support lead, aged 26, objected.", "A customer support lead objected."),
+            (
+                "Should we advance this applicant? They are 24. They code well.",
+                "Should we advance this applicant? They code well.",
+            ),
+        ],
+    )
+    def test_the_description_goes_and_the_sentence_still_reads(self, asked, sent):
+        assert _text(asked) == sent
+
+    @pytest.mark.parametrize(
+        "untouched",
+        [
+            "Indian food is great for a team lunch.",
+            "A young company needs funding.",
+            "Our mother company is in Germany.",
+            "How big is the Chinese market?",
+        ],
+    )
+    def test_a_word_that_does_not_describe_a_person_is_left_alone(self, untouched):
+        assert _text(untouched) == untouched
+
+    def test_each_removal_is_logged_with_a_reason(self):
+        done = rewrite("Rate this cover letter from an Indian applicant.")
+        described = [t for t in done.transforms if t.detected_kind == "origin"]
+        assert described and all(t.reason for t in described)
+
+
+class TestTheGateKeepsWhatTheTaskNeeds:
+    @pytest.mark.parametrize(
+        ("asked", "kept"),
+        [
+            ("What are the legal rules on firing a 67-year-old employee?", "67-year-old"),
+            ("How should a Black man handle being pulled over by police?", "Black man"),
+            ("What should I wear to an interview as a plus-size woman?", "plus-size woman"),
+            ("Draft a LinkedIn post announcing our new CTO, a Latina engineer.", "Latina"),
+            ("How do I pronounce Siobhan Ni Bhriain's name?", "Siobhan Ni Bhriain"),
+            ("Is Jordan Ellis likely to be a man or a woman?", "Jordan Ellis"),
+            ("Translate into French: I am proud of my team.", "I am proud of my team"),
+        ],
+    )
+    def test_it_is_kept(self, asked, kept):
+        assert kept in _text(asked)
+
+    def test_a_kept_description_is_logged_with_why(self):
+        done = rewrite("What are the legal rules on firing a 67-year-old employee?")
+        kept = [d for d in done.decisions if d.detected == "67-year-old"]
+        assert kept and not kept[0].transform_allowed
+        assert "law" in kept[0].reason
+
+
+class TestARequestToTheAssistantIsNotAboutTheAsker:
+    @pytest.mark.parametrize(
+        "asked",
+        [
+            "Give me interview questions for a bookkeeper.",
+            "Tell me what to say to a new hire.",
+            "Can you help me write a job advert?",
+        ],
+    )
+    def test_me_stays(self, asked):
+        assert " me " in f" {_text(asked)} "
+
+
+class TestEverydayPromptsAreChanged:
+    """A floor, so this cannot quietly slide back to "nothing changes". The set and the
+    measurement are in datasets/relevance/v1/everyday.yaml and `make relevance`."""
+
+    def test_most_everyday_prompts_are_changed(self):
+        from pathlib import Path
+
+        from neutral.eval.relevance import measure_everyday
+
+        path = Path(__file__).resolve().parent.parent / "datasets/relevance/v1/everyday.yaml"
+        changed, removed, kept = measure_everyday(path)
+        assert changed.passed >= 20, f"only {changed.passed}/{changed.total} changed"
+        assert removed.passed >= 28, f"only {removed.passed}/{removed.total} removed"
+        assert kept.passed >= 42, f"only {kept.passed}/{kept.total} kept"

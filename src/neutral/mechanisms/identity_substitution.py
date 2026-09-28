@@ -152,6 +152,112 @@ class _Edit:
     span: Span
     replacement: str
     detected: str
+    kind: str = "agreement"
+    reason: str = 'the verb agrees with "they", which replaced a gendered pronoun'
+
+
+# Why each kind of description is taken out. Shown under "What Neutral changed", so it is
+# written for the person reading it.
+_ATTRIBUTE_REASONS = {
+    "age": "a stated age invites assumptions about ability and attitude",
+    "gender": "a gendered word states the person's gender",
+    "family": "a family role states the person's gender; the relationship is kept",
+    "origin": "nationality, ethnicity or race invites assumptions the task does not need",
+    "religion": "religion invites assumptions the task does not need",
+    "orientation": "sexual orientation or gender identity is not what the task is about",
+}
+
+
+def _match_case(original: str, word: str) -> str:
+    return word[:1].upper() + word[1:] if original[:1].isupper() else word
+
+
+def _takes_an(word: str) -> bool:
+    low = word.lower()
+    if re.match(r"(?:8|11\b|18\b|1[18]\d\d\b)", low):
+        return True
+    if low.startswith(("uni", "use", "usu", "uti", "eu", "one", "once", "ubiq")):
+        return False
+    if low.startswith(("hour", "honest", "honor", "honour", "heir")):
+        return True
+    return low[:1] in "aeiou"
+
+
+def _attribute_edits(prompt: str, findings: list[Finding], allowed: set[int]) -> list[_Edit]:
+    """Descriptions of a person, taken out or made neutral, with "a"/"an" put right.
+
+    A gendered or family noun is replaced by its neutral counterpart ("woman" ->
+    "person", "mom" -> "parent"), so the sentence keeps its shape and the relationship
+    survives. Everything else is removed along with the space beside it, and an article
+    left in front of a different sound is corrected: "an 18 year old model" -> "a model".
+    """
+    from neutral.detect_attributes import ATTRIBUTE_KINDS, FAMILY_NOUNS, GENDER_NOUNS
+
+    edits: list[_Edit] = []
+    for index in sorted(allowed):
+        finding = findings[index]
+        if finding.kind not in ATTRIBUTE_KINDS:
+            continue
+        reason = _ATTRIBUTE_REASONS[finding.kind]
+        low = finding.text.lower()
+        neutral = GENDER_NOUNS.get(low) or FAMILY_NOUNS.get(low)
+        if neutral:
+            edits.append(
+                _Edit(
+                    finding.span,
+                    _match_case(finding.text, neutral),
+                    finding.text,
+                    finding.kind,
+                    reason,
+                )
+            )
+            continue
+        start, end = finding.span.start, finding.span.end
+        if finding.text[:1] == "," and prompt[end : end + 1] == ",":
+            end += 1  # "a lead, aged 26, objected" - both commas go
+        if finding.text[:1] not in ", (" and not finding.text[:1].isspace():
+            if end < len(prompt) and prompt[end] == " ":
+                end += 1
+            elif start > 0 and prompt[start - 1] == " ":
+                start -= 1
+        edits.append(_Edit(Span(start, end), "", finding.text, finding.kind, reason))
+
+    edits.sort(key=lambda e: e.span.start)
+    fixes: list[_Edit] = []
+    for i, edit in enumerate(edits):
+        if edit.replacement:
+            continue
+        # The run of removals this one begins, if it begins one.
+        if i and not edits[i - 1].replacement and edits[i - 1].span.end == edit.span.start:
+            continue
+        chain_end = edit.span.end
+        j = i + 1
+        while j < len(edits) and not edits[j].replacement and edits[j].span.start == chain_end:
+            chain_end = edits[j].span.end
+            j += 1
+        article = re.search(r"\b(an?)\s+$", prompt[: edit.span.start], re.I)
+        if not article:
+            continue
+        following = next(
+            (e.replacement for e in edits if e.replacement and e.span.start == chain_end), None
+        )
+        if following is None:
+            word = re.match(r"\s*([\w']+)", prompt[chain_end:])
+            if not word:
+                continue
+            following = word.group(1)
+        wanted = "an" if _takes_an(following) else "a"
+        if article.group(1).lower() != wanted:
+            fixes.append(
+                _Edit(
+                    Span(article.start(1), article.end(1)),
+                    _match_case(article.group(1), wanted),
+                    article.group(1),
+                    "agreement",
+                    "the article matches the word that now follows it",
+                )
+            )
+    return edits + fixes
 
 
 def _grammar(prompt: str, findings: list[Finding], allowed: set[int]):
@@ -255,16 +361,23 @@ def apply(prompt: str, findings: list[Finding], allowed: set[int]) -> Substituti
     identity_map: dict[str, str] = {}
     pronoun_style: dict[str, str] = {}
 
+    from neutral.detect_attributes import ATTRIBUTE_KINDS
+
     forms, agreement = _grammar(prompt, findings, allowed)
-    claimed = [f.span for i, f in enumerate(findings) if i in allowed]
+    described = _attribute_edits(prompt, findings, allowed)
+    claimed = [f.span for i, f in enumerate(findings) if i in allowed] + [e.span for e in described]
     agreement = [
         e
         for e in agreement
         if not any(e.span.start < c.end and e.span.end > c.start for c in claimed)
     ]
     work: list[tuple[int, int | None, _Edit | None]] = sorted(
-        [(f.span.start, i, None) for i, f in enumerate(findings) if i in allowed]
-        + [(e.span.start, None, e) for e in agreement],
+        [
+            (f.span.start, i, None)
+            for i, f in enumerate(findings)
+            if i in allowed and f.kind not in ATTRIBUTE_KINDS
+        ]
+        + [(e.span.start, None, e) for e in agreement + described],
         key=lambda w: w[0],
     )
 
@@ -284,12 +397,12 @@ def apply(prompt: str, findings: list[Finding], allowed: set[int]) -> Substituti
                 TransformRecord(
                     mechanism=MECHANISM,
                     detected=edit.detected,
-                    detected_kind="agreement",
+                    detected_kind=edit.kind,
                     replacement=edit.replacement,
                     source=span,
                     policy=POLICY_NAME,
                     policy_version=POLICY_VERSION,
-                    reason='the verb agrees with "they", which replaced a gendered pronoun',
+                    reason=edit.reason,
                 )
             )
             cursor = span.end

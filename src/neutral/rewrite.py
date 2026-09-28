@@ -25,12 +25,14 @@ from __future__ import annotations
 import string
 from dataclasses import dataclass, field
 
-from neutral.core import Segment, SegmentKind, Span, TransformRecord
+from neutral.core import PolicyDecision, Segment, SegmentKind, Span, TransformRecord
 from neutral.detect import detect_names_local, find_pronouns
+from neutral.detect_attributes import detect_attributes
+from neutral.gate import identity_verdict
 from neutral.invariants import verify_no_added_information
 from neutral.mechanisms import order_neutralisation, person_neutralisation
 from neutral.mechanisms.identity_substitution import apply as substitute
-from neutral.policy import decide, safety_hold
+from neutral.policy import POLICY_NAME, POLICY_VERSION, decide, safety_hold
 
 # Every mechanism this orchestrator knows how to run. Mechanism 4 is not here: it is
 # opt-in per request and injects content, which is a different path entirely.
@@ -114,6 +116,10 @@ def _splice(
     return tuple(out), used
 
 
+def person_first_person_verdict(prompt: str):
+    return identity_verdict(prompt, "first_person")
+
+
 def rewrite(
     prompt: str,
     *,
@@ -137,7 +143,9 @@ def rewrite(
     findings: list = []
     if IDENTITY in mechanisms:
         names = detect_names_local(prompt)
-        findings = sorted(names + find_pronouns(prompt, names), key=lambda f: f.span.start)
+        pronouns = find_pronouns(prompt, names)
+        described = detect_attributes(prompt, [f.span for f in names + pronouns])
+        findings = sorted(names + pronouns + described, key=lambda f: f.span.start)
 
     decisions = tuple(decide(prompt, findings)) if findings else ()
     allowed = {i for i, d in enumerate(decisions) if d.transform_allowed}
@@ -148,7 +156,22 @@ def rewrite(
     restoration: dict[str, str] = {}
     asker: dict[str, str] = {}
 
-    if PERSON in mechanisms:
+    # "Translate this: I am proud of my team" - the first person is the text being worked
+    # on, not a statement about who is asking. The policy says so; Mechanism 3 is not run.
+    first_person = person_first_person_verdict(prompt) if PERSON in mechanisms else None
+    if first_person is not None and first_person.needed:
+        decisions = (
+            *decisions,
+            PolicyDecision(
+                detected="I, me, my",
+                detected_kind="first_person",
+                source=Span(0, len(prompt)),
+                transform_allowed=False,
+                reason=f"Policy {POLICY_NAME}/{POLICY_VERSION}: {first_person.reason}.",
+            ),
+        )
+
+    if PERSON in mechanisms and not (first_person and first_person.needed):
         # The asker becomes the next person along: with Priya already "Person A", the
         # asker is "Person B". Chosen here, because Mechanism 3 does not know who
         # Mechanism 1 has named and must not ask it.

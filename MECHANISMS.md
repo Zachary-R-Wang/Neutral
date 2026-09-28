@@ -61,6 +61,19 @@ the user. Two rules fix it:
 That second rule is precise enough to be a test, and it will be one: *count(A-first) and
 count(B-first) differ by 0 when the total is even, and by exactly 1 when it is odd.*
 
+### Descriptions (added 2026-09-28)
+
+Mechanism 1 also covers descriptions of a person: age ("58-year-old", "aged 26", "in
+her forties", "They are 24."), gender words ("female", "woman", "actress"), family roles
+("mom", "wife"), nationality, ethnicity and race, religion, and sexual orientation. Only
+where they describe a person: "a young founder", not "a young company"; "an Indian
+applicant", not "Indian food".
+
+A gendered noun becomes its neutral counterpart ("woman" -> "person", "mom" -> "parent");
+everything else is removed and the article corrected ("an 18 year old model" -> "a
+model"). The relevance gate (`gate.py`) keeps a description when the request is about
+that kind of thing: the law, a name, dress, discrimination, an announcement.
+
 ## Mechanism 3 — Person neutralisation
 
 First-person framing tells the model the user is the author or the subject, which is the

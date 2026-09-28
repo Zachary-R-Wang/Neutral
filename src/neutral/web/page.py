@@ -46,7 +46,7 @@ HEAD_ICONS = (
 # typed by hand saying "Phase 1 - names and bound pronouns only", which stayed on the page
 # for a day after Mechanisms 2 and 3 went live and told the founder they did not exist.
 MECHANISM_WORDS = {
-    "identity_substitution": ("names and pronouns",),
+    "identity_substitution": ("names", "pronouns", "descriptions like age or nationality"),
     "person_neutralisation": ("who is asking",),
     # Two things, listed as two, so the sentence reads as one list with one "and".
     "order_neutralisation": ("who is named first", "who is the subject"),
@@ -514,13 +514,24 @@ def _flag(turn: Turn) -> str:
     return f'<div class="oct flag{stop}">{escape(turn.note)}</div>'
 
 
-# One line per mechanism, so it is plain which of them fired. A flat list of every swap
-# buried the second and third under the names, and read as though they never ran.
-CHANGE_HEADINGS = {
-    "identity_substitution": "Names",
-    "person_neutralisation": "Who is asking",
-    "order_neutralisation": "Order",
-}
+# One line per kind of change, so it is plain which mechanisms fired. A flat list of
+# every swap buried the rest under the names, and read as though they never ran.
+# Grammar goes last: it is the consequence of the others, not a change of its own.
+_HEADING_ORDER = ("Names", "Descriptions", "Who is asking", "Order", "Grammar")
+
+
+def _heading(change) -> str:
+    from neutral.detect_attributes import ATTRIBUTE_KINDS
+
+    if change.detected_kind == "agreement":
+        return "Grammar"
+    if change.mechanism == "identity_substitution":
+        return "Descriptions" if change.detected_kind in ATTRIBUTE_KINDS else "Names"
+    if change.mechanism == "person_neutralisation":
+        return "Who is asking"
+    if change.mechanism == "order_neutralisation":
+        return "Order"
+    return change.mechanism
 
 
 def _changes(turn: Turn) -> str:
@@ -528,17 +539,25 @@ def _changes(turn: Turn) -> str:
         return ""
     grouped: dict[str, list[tuple[str, str]]] = {}
     for c in turn.changes:
-        pairs = grouped.setdefault(c.mechanism, [])
+        pairs = grouped.setdefault(_heading(c), [])
         if (c.detected, c.replacement) not in pairs:
             pairs.append((c.detected, c.replacement))
+
+    def shown(before: str, after: str) -> str:
+        before = f"<code>{escape(before.strip(' ,()'))}</code>"
+        if not after.strip():
+            return f"{before} removed"
+        return f"{before} &rarr; <code>{escape(after)}</code>"
+
+    ordered = sorted(
+        grouped.items(),
+        key=lambda kv: _HEADING_ORDER.index(kv[0]) if kv[0] in _HEADING_ORDER else 99,
+    )
     lines = "".join(
-        f"<li><span>{escape(CHANGE_HEADINGS.get(mechanism, mechanism))}</span> "
-        + ", ".join(
-            f"<code>{escape(before)}</code> &rarr; <code>{escape(after)}</code>"
-            for before, after in pairs
-        )
+        f"<li><span>{escape(heading)}</span> "
+        + ", ".join(shown(before, after) for before, after in pairs)
         + "</li>"
-        for mechanism, pairs in grouped.items()
+        for heading, pairs in ordered
     )
     return f'<div class="changes">Changed before sending<ul>{lines}</ul></div>'
 
