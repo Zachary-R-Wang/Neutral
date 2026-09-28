@@ -60,8 +60,17 @@ def _coin(text: str) -> bool:
     return digest[0] & 1 == 1
 
 
+# Mechanism 1 also rewrites verbs so they agree with "they" ("takes" -> "take"). Those are
+# its segments too, and are not people; only a placeholder or a pronoun is.
+_PERSON_TEXT = re.compile(r"(?:Person [A-Z]|they|them|their|theirs|themselves)(?:'s)?", re.I)
+
+
 def _is_person(segment: Segment) -> bool:
-    return segment.kind is SegmentKind.REPLACE and segment.mechanism == "identity_substitution"
+    return (
+        segment.kind is SegmentKind.REPLACE
+        and segment.mechanism == "identity_substitution"
+        and _PERSON_TEXT.fullmatch(segment.text) is not None
+    )
 
 
 def apply(segments: tuple[Segment, ...]) -> Reordering:
@@ -250,13 +259,7 @@ def apply_roles(original: str, segments, *, flip: bool | None = None) -> Reorder
         # Rules alone cannot tell a doer from a receiver. Leave it.
         return Reordering(segments=segments)
 
-    people = [
-        s.source
-        for s in segments
-        if s.kind is SegmentKind.REPLACE
-        and s.mechanism == "identity_substitution"
-        and s.source is not None
-    ]
+    people = [s.source for s in segments if _is_person(s) and s.source is not None]
     if len(people) < 2:
         return Reordering(segments=segments)
 

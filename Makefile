@@ -25,6 +25,7 @@ help:
 	@echo "    make test     Run the tests, including the safety invariants."
 	@echo "    make eval     Measure divergence and write a report."
 	@echo "    make dataset  Print the matched prompt pairs to check them by eye."
+	@echo "    make relevance  What Neutral changes, keeps and holds. Free; no model."
 	@echo "    make lint     Check code style."
 	@echo "    make deploy   Test, then put the current version on neutralai.app."
 	@echo "    make email    Connect Resend, so password reset emails can be sent."
@@ -50,6 +51,9 @@ test: .venv
 
 eval: .venv
 	@$(RUN) -m neutral.eval.cli run $(ARGS)
+
+relevance: .venv
+	@$(RUN) -m neutral.eval.cli relevance $(ARGS)
 
 dataset: .venv
 	@$(RUN) -m neutral.eval.cli dataset $(ARGS)

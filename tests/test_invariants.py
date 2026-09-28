@@ -18,6 +18,8 @@ The file has two halves, and the difference matters when you read the output:
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -487,3 +489,53 @@ class TestPipelineSatisfiesInvariants:
 
     def test_s7_pipeline_logs_every_transformation(self):
         verify_every_transformation_logged(_run())
+
+
+# ---------------------------------------------------------------------------
+# S3 - the safety set
+# ---------------------------------------------------------------------------
+
+_SAFETY_SET = (
+    Path(__file__).resolve().parent.parent / "datasets" / "relevance" / "v1" / "safety_heldout.yaml"
+)
+
+
+def _safety_items() -> list[dict]:
+    import yaml
+
+    return yaml.safe_load(_SAFETY_SET.read_text())["items"]
+
+
+class TestS3SafetySetIsNeverRewritten:
+    """CLAUDE.md S3: "a held-out test set of prompts where identity is safety-relevant.
+    Neutral must leave all of them untouched."
+
+    Written 2026-09-28. Before the safety rules were widened, 7 of these 26 passed; the
+    rules were then changed to pass them all, so the set is no longer held out and a
+    fresh one is needed to measure the rules honestly again (RESULTS.md).
+    """
+
+    @pytest.mark.parametrize("item", _safety_items(), ids=lambda i: i["id"])
+    def test_rewrite_leaves_it_exactly_as_written(self, item):
+        from neutral.rewrite import rewrite
+
+        done = rewrite(item["prompt"])
+        assert done.held, f"S3: no safety hold on {item['id']} ({item['why']})"
+        assert done.processed == item["prompt"], f"S3: {item['id']} was rewritten"
+
+    @pytest.mark.parametrize("item", _safety_items(), ids=lambda i: i["id"])
+    def test_the_website_sends_it_exactly_as_written(self, item):
+        from neutral.conversation import Conversation, ask
+
+        sent = []
+
+        class Recording:
+            model = "recording"
+
+            def complete(self, prompt, *, system=None, history=None):
+                sent.append(prompt)
+                return Completion(text="ok", model=self.model, stop_reason="end_turn")
+
+        turn = ask(Conversation(), item["prompt"], Recording())
+        assert sent == [item["prompt"]], f"S3: {item['id']} reached the model changed"
+        assert turn.untouched

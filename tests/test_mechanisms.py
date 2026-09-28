@@ -512,3 +512,51 @@ class TestTheAnswerComesBackAddressedToYou:
         asked = "I think my manager Priya Raman is unfair. She ignores me."
         back = self._back("Person B should talk to Person A. They may not realise it.", asked)
         assert back == "You should talk to Priya Raman. She may not realise it."
+
+
+# ---------------------------------------------------------------------------
+# Mechanism 1: "they" with the grammar that goes with it
+# ---------------------------------------------------------------------------
+
+
+class TestTheyIsGrammatical:
+    """Found 2026-09-28 by reading what the safety set would have sent: "they takes",
+    "does they", "a bruise on them face", "paying their in cash"."""
+
+    @pytest.mark.parametrize(
+        ("asked", "sent"),
+        [
+            ("She takes the blame.", "They take the blame."),
+            ("Does she deserve a raise?", "Do they deserve a raise?"),
+            ("Is he ready?", "Are they ready?"),
+            ("He was promoted.", "They were promoted."),
+            ("She has been told.", "They have been told."),
+            ("She doesn't complain.", "They don't complain."),
+            ("He isn't sure.", "They aren't sure."),
+            ("Tell her that her review is late.", "Tell them that their review is late."),
+            ("I keep paying her well.", "Person A keeps paying them well."),
+        ],
+    )
+    def test_the_verb_and_the_pronoun_agree(self, asked, sent):
+        assert _text(asked) == sent
+
+    @pytest.mark.parametrize(
+        ("asked", "sent"),
+        [
+            ("She's been overlooked.", "They've been overlooked."),
+            ("He's got two offers.", "They've got two offers."),
+            ("She's ready.", "They're ready."),
+            ("He'll decide soon.", "They'll decide soon."),
+            ("She'd like a raise.", "They'd like a raise."),
+        ],
+    )
+    def test_contractions_no_longer_carry_the_gender_through(self, asked, sent):
+        """Until 2026-09-28 "she's" and "he'll" were not recognised as pronouns at all,
+        and reached the model with the gender intact."""
+        assert _text(asked) == sent
+
+    def test_changed_verbs_are_not_mistaken_for_people(self):
+        """Mechanism 2 swaps people; the verbs Mechanism 1 changes are not people. When it
+        thought they were, "She takes the blame" came out as "take They the blame"."""
+        out = _text("Priya Raman mentored Greg Miller. She trains him and he thanks her.")
+        assert out.endswith("They train them and they thank them.")

@@ -1,0 +1,75 @@
+# Prompts where the identity signal IS the task (CLAUDE.md §5, Phase 2). Replacing the
+# name, the pronoun or the "I" changes the question into a different one, so Neutral
+# must leave the listed text exactly as written.
+#
+# `keep` lists the text that must reach the model unchanged. A prompt passes when every
+# entry is still there, word for word.
+#
+# Written on 2026-09-28 by a language model (Claude). No real people.
+set: identity_relevant
+expect: keep
+items:
+  - id: rel-001
+    why: pronunciation depends on the name itself
+    prompt: How do I pronounce Siobhan Ní Bhriain's name before her interview tomorrow?
+    keep: [Siobhan Ní Bhriain]
+  - id: rel-002
+    why: which part is the family name depends on the name
+    prompt: Is Nguyen Van Minh's family name Nguyen or Minh? I need to address a formal letter to him.
+    keep: [Nguyen Van Minh]
+  - id: rel-003
+    why: the honorific depends on the name and the culture
+    prompt: What honorific should I use for Aiko Tanaka in a formal Japanese business email?
+    keep: [Aiko Tanaka]
+  - id: rel-004
+    why: the alphabetical order depends on the surnames
+    prompt: Maria José García López wants both surnames on the staff list. Where does she go alphabetically, under G or L?
+    keep: [Maria José García López]
+  - id: rel-005
+    why: a name change is the subject of the question
+    prompt: Hannah Schmidt is changing her surname to Okoye after her wedding. Which HR records need updating?
+    keep: [Hannah Schmidt, Okoye]
+  - id: rel-006
+    why: the question is about how a name is gendered
+    prompt: Is Jordan Ellis likely to be a man or a woman? I don't want to guess wrong in the greeting.
+    keep: [Jordan Ellis]
+  - id: rel-007
+    why: the given name and family name order is the question
+    prompt: My colleague Zhang Wei signs his emails "Wei Zhang". Which one is his given name?
+    keep: [Zhang Wei]
+  - id: rel-008
+    why: the nickname depends on the name
+    prompt: What would Aleksandr Petrov's usual Russian nickname be? I want the welcome card to feel personal.
+    keep: [Aleksandr Petrov]
+  - id: rel-009
+    why: a correction of someone's pronouns is the task
+    prompt: "Alex has asked to be referred to as she. Fix this announcement: Alex has joined the QA team and he will lead the release checks."
+    keep: [he will lead]
+  - id: rel-010
+    why: first person is the grammar being asked about
+    prompt: Is it "my manager and I" or "my manager and me" in the sentence Please send the report to my manager and I?
+    keep: [send the report to my manager and I]
+  - id: rel-011
+    why: the text to translate is in the first person
+    prompt: "Translate into French: I am proud of my team and I thank them for their work."
+    keep: [I am proud of my team and I thank them]
+  - id: rel-012
+    why: the grammar being corrected is the first person
+    prompt: Correct the grammar in this line from my cover letter, I has been working in logistics since 2019.
+    keep: [I has been working in logistics since 2019]
+  - id: rel-013
+    why: the spelling of the name is the question
+    prompt: Is it spelled Katharine or Katherine for our new director, Katharine Olsen? Her badge says one and her email says the other.
+    keep: [Katharine Olsen]
+  - id: rel-014
+    why: rewriting from first to third person is the task
+    prompt: Rewrite my bio in the third person. I lead the data team and I have ten years in analytics.
+    keep: [I lead the data team and I have ten years in analytics]
+  - id: rel-015
+    why: the meaning of the name is the question
+    prompt: What does the name Oluwaseun mean? Our new hire Oluwaseun Adeyemi mentioned it has a story.
+    keep: [Oluwaseun]
+  - id: rel-016
+    why: how the name is written in another script is the question
+    prompt: How is Dmitri Volkov written in Cyrillic? I'm making his name plate.
+    keep: [Dmitri Volkov]

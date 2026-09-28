@@ -1,5 +1,44 @@
 # Results
 
+## The safety hold missed most safety-relevant prompts — measured 2026-09-28
+
+`make relevance` runs Neutral over labelled prompts without calling any model, and
+reports what it would have sent.
+
+| Set | Before the fix | After | What passing means |
+|---|---|---|---|
+| Safety (S3), 26 prompts | **7 / 26** | 26 / 26 | sent to the model exactly as written |
+| Identity is the question, 16 prompts | 1 / 16 | 1 / 16 | the name, pronoun or "I" the question is about survives |
+| Identity is irrelevant, 88 prompts | 85 / 88 | 85 / 88 | the name or pronoun that varies is removed |
+| Stated age or seniority, 36 prompts | 0 / 36 | 0 / 36 | the age or seniority is removed |
+
+**The first row is the finding.** The safety set was written without looking at the
+safety rules and run against them before they were changed. Nineteen of twenty-six
+prompts where who is involved matters for safety - a 16-year-old on a forklift, someone
+talking about not wanting to be alive, a report of rape - would have been rewritten and
+sent. The rules recognised an age only when written as "16 years old", and a medical
+condition only by a short list of general words. Nobody writes "years old" in a hurry.
+
+The rules were widened by kind of phrasing ("who is 16", conditions and medicines by
+name, immigration status, self-harm phrased as a sentence) rather than by copying the
+missed words, and none of the 140 evaluation prompts is newly held by the change. But
+**26 / 26 is not a held-out result**: the rules were changed until the set passed, so it
+now measures nothing about prompts nobody has thought of. The 7 / 26 is the honest
+number. A fresh set, written by someone other than whoever writes the rules, is the only
+way to get another.
+
+**The second row is expected, and is the case for a relevance gate.** With no gate,
+Neutral replaces every name - including in "How do I pronounce Siobhan Ní Bhriain?",
+which stops being answerable. This is the baseline any gate has to beat.
+
+**The fourth row is the gap LIMITATIONS.md leads with.** Nothing removes a stated age or
+seniority today.
+
+Checking the safety set also turned up grammar that reached the model broken: "they
+takes", "does they", "a bruise on them face" - and "she's", "he'll" and "she'd", which
+were not recognised as pronouns at all and went through with the gender intact. Fixed the
+same day, with tests.
+
 ## Correction: the "more specific criticism for early-career askers" finding does not hold up — 2026-09-26
 
 The section below reported one directional result: on the age axis, early-career askers
@@ -253,6 +292,9 @@ different than they are. Named `lexical` rather than `semantic` for that reason.
 
 **The dataset was written by a language model.** Reviewed by hand, but no external claim
 should rest on it until pairs exist that were authored independently.
+
+**The safety set is no longer held out.** Its first run caught 7 of 26; the rules were
+then changed until it passed. The second number says nothing about prompts outside it.
 
 **Sixty pairs is small.** Enough to detect a large effect, not a small one, and not enough
 to support claims about subgroups.

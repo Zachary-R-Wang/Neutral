@@ -76,6 +76,7 @@ PRONOUNS = {
 }
 
 _WORD = re.compile(r"\b\w+(?:'\w+)?\b")
+_CONTRACTED = re.compile(r"(he|she)'(?:s|ll|d|re|ve)", re.I)
 
 
 def verify(prompt: str, claimed: list[DetectedSpan]) -> list[Finding]:
@@ -106,9 +107,16 @@ def find_pronouns(prompt: str, skip: list[Finding]) -> list[Finding]:
     findings = []
     for match in _WORD.finditer(prompt):
         word = match.group(0)
-        if word.lower() not in PRONOUNS:
-            continue
         start, end = match.start(), match.end()
+        if word.lower() not in PRONOUNS:
+            # "she's", "he'll", "she'd" are one word to the pattern above, and used to go
+            # through untouched - gender and all. The pronoun is the part before the
+            # apostrophe; the contraction is left for the grammar to adjust.
+            contracted = _CONTRACTED.fullmatch(word)
+            if not contracted:
+                continue
+            word = contracted.group(1)
+            end = start + len(word)
         if any(start < c_end and end > c_start for c_start, c_end in claimed):
             continue
         findings.append(Finding(Span(start, end), word, "pronoun"))

@@ -497,6 +497,51 @@ def run_eval(args: argparse.Namespace) -> int:
     return 0
 
 
+def show_relevance(args: argparse.Namespace) -> int:
+    """What Neutral does to the labelled sets: free, local, no model is called."""
+    import json
+
+    from neutral.eval.relevance import RelevanceSetError, measure_all
+
+    try:
+        results = measure_all(ROOT)
+    except (RelevanceSetError, DatasetError) as exc:
+        print(f"\n{exc}\n")
+        return 1
+
+    print("\n  What Neutral does to prompts, before any model sees them\n")
+    for r in results:
+        print(f"  {r.passed:>3} / {r.total:<3} {r.name:<14} {r.meaning}")
+    for r in results:
+        if r.failures and (args.all or r.name in ("safety", "relevant")):
+            print(f"\n  {r.name}: not as expected")
+            for o in r.failures:
+                print(f"    {o.id}  {o.why} - {o.detail}")
+                if args.all:
+                    print(f"        sent: {o.sent}")
+    out = ROOT / "reports" / "relevance.json"
+    out.parent.mkdir(exist_ok=True)
+    out.write_text(
+        json.dumps(
+            [
+                {
+                    "set": r.name,
+                    "meaning": r.meaning,
+                    "passed": r.passed,
+                    "total": r.total,
+                    "outcomes": [o.__dict__ for o in r.outcomes],
+                }
+                for r in results
+            ],
+            indent=2,
+        )
+    )
+    print(f"\n  Written to {out.relative_to(ROOT)}\n")
+    safety = next(r for r in results if r.name == "safety")
+    # S3 is the one line here that must be perfect; everything else is a measurement.
+    return 0 if safety.passed == safety.total else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     # Without this, Python block-buffers stdout when output is piped or redirected, so a
     # run that takes half an hour shows nothing at all until it finishes. Progress during
@@ -523,6 +568,12 @@ def main(argv: list[str] | None = None) -> int:
     p_dataset.add_argument("--pair", help="show only this pair id")
     p_dataset.add_argument("--full", action="store_true", help="print both prompts in full")
     p_dataset.set_defaults(func=show_dataset)
+
+    p_relevance = sub.add_parser(
+        "relevance", help="what Neutral changes, keeps and holds, on the labelled sets"
+    )
+    p_relevance.add_argument("--all", action="store_true", help="list every miss in full")
+    p_relevance.set_defaults(func=show_relevance)
 
     p_run = sub.add_parser("run", help="measure divergence and write a report")
     p_run.add_argument("--slice", default="all", help="'hr' for the baseline only, or 'all'")

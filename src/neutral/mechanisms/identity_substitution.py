@@ -135,8 +135,109 @@ def group_people(findings: list[Finding]) -> dict[int, str]:
     return {i: labels[g] for i, g in assignment.items()}
 
 
-def _pronoun_replacement(prompt: str, span: Span, word: str) -> str:
-    form = _FORM.get(word.lower(), "subject")
+# "she is" -> "they are". The forms that do not follow the regular rule; anything else in
+# the third person singular goes to the parser's base form ("takes" -> "take").
+_TO_PLURAL = {
+    "is": "are",
+    "was": "were",
+    "has": "have",
+    "does": "do",
+    "'s": "'re",
+    "\u2019s": "\u2019re",
+}
+
+
+@dataclass(frozen=True)
+class _Edit:
+    span: Span
+    replacement: str
+    detected: str
+
+
+def _grammar(prompt: str, findings: list[Finding], allowed: set[int]):
+    """What "her" is in each place, and the verbs that must change to agree with "they".
+
+    Without this, "she takes" went to the model as "they takes", "does she" as "does
+    they", and "paying her well" as "paying their well" - the old rule for "her" guessed
+    from the word before it. The sentence parser that finds names says which "her" is
+    which, and which verbs belong to which subject.
+
+    Returns ({finding index: form}, [verb edits]). With no parser, nothing: the older
+    rules stand, and the grammar is no worse than it was.
+    """
+    from neutral.detect import _model
+
+    nlp = _model()
+    if nlp is None:
+        return {}, []
+    doc = nlp(prompt)
+    at = {t.idx: t for t in doc}
+    forms: dict[int, str] = {}
+    edits: list[_Edit] = []
+
+    for index in allowed:
+        finding = findings[index]
+        if finding.kind != "pronoun":
+            continue
+        token = at.get(finding.span.start)
+        if token is None:
+            continue
+        low = finding.text.lower()
+        if low == "her":
+            forms[index] = "possessive" if token.tag_ == "PRP$" else "object"
+            continue
+        if low not in ("he", "she"):
+            continue
+
+        verbs = []
+        following = doc[token.i + 1] if token.i + 1 < len(doc) else None
+        if following is not None and following.text.lower() in ("'s", "\u2019s"):
+            # "she's been" is "she has been"; "she's ready" is "she is ready".
+            nxt = doc[following.i + 1].text.lower() if following.i + 1 < len(doc) else ""
+            has = following.lemma_ == "have" or nxt in ("been", "got", "gotten", "had")
+            edits.append(
+                _Edit(
+                    Span(following.idx, following.idx + len(following.text)),
+                    following.text[0] + ("ve" if has else "re"),
+                    following.text,
+                )
+            )
+            continue
+        if token.dep_ in ("nsubj", "nsubjpass"):
+            head = token.head
+            auxes = sorted(
+                (c for c in head.children if c.dep_ in ("aux", "auxpass")), key=lambda c: c.i
+            )
+            if auxes:
+                verbs.append(auxes[0])
+            else:
+                verbs.append(head)
+                verbs += [
+                    c
+                    for c in head.conjuncts
+                    if not any(k.dep_.startswith("nsubj") for k in c.children)
+                ]
+        for verb in verbs:
+            plural = _plural(verb)
+            if plural and plural != verb.text:
+                edits.append(_Edit(Span(verb.idx, verb.idx + len(verb.text)), plural, verb.text))
+    return forms, edits
+
+
+def _plural(verb) -> str | None:
+    """The verb as it goes with "they", or None if it already does."""
+    low = verb.text.lower()
+    if low in _TO_PLURAL:
+        plural = _TO_PLURAL[low]
+    elif verb.tag_ == "VBZ" and verb.lemma_.isalpha() and verb.lemma_.lower() != low:
+        plural = verb.lemma_.lower()
+    else:
+        return None
+    return plural.capitalize() if verb.text[:1].isupper() else plural
+
+
+def _pronoun_replacement(prompt: str, span: Span, word: str, form: str | None = None) -> str:
+    form = form or _FORM.get(word.lower(), "subject")
     if form == "ambiguous":
         before = _WORD.findall(prompt[: span.start])
         previous = before[-1].lower() if before else ""
@@ -154,11 +255,22 @@ def apply(prompt: str, findings: list[Finding], allowed: set[int]) -> Substituti
     identity_map: dict[str, str] = {}
     pronoun_style: dict[str, str] = {}
 
+    forms, agreement = _grammar(prompt, findings, allowed)
+    claimed = [f.span for i, f in enumerate(findings) if i in allowed]
+    agreement = [
+        e
+        for e in agreement
+        if not any(e.span.start < c.end and e.span.end > c.start for c in claimed)
+    ]
+    work: list[tuple[int, int | None, _Edit | None]] = sorted(
+        [(f.span.start, i, None) for i, f in enumerate(findings) if i in allowed]
+        + [(e.span.start, None, e) for e in agreement],
+        key=lambda w: w[0],
+    )
+
     cursor = 0
-    for index, finding in enumerate(findings):
-        if index not in allowed:
-            continue
-        span = finding.span
+    for _, index, edit in work:
+        span = edit.span if edit else findings[index].span
         if span.start < cursor:
             continue
 
@@ -166,6 +278,24 @@ def apply(prompt: str, findings: list[Finding], allowed: set[int]) -> Substituti
             untouched = Span(cursor, span.start)
             segments.append(Segment(SegmentKind.COPY, untouched, untouched.text_in(prompt)))
 
+        if edit:
+            segments.append(Segment(SegmentKind.REPLACE, span, edit.replacement, MECHANISM))
+            transforms.append(
+                TransformRecord(
+                    mechanism=MECHANISM,
+                    detected=edit.detected,
+                    detected_kind="agreement",
+                    replacement=edit.replacement,
+                    source=span,
+                    policy=POLICY_NAME,
+                    policy_version=POLICY_VERSION,
+                    reason='the verb agrees with "they", which replaced a gendered pronoun',
+                )
+            )
+            cursor = span.end
+            continue
+
+        finding = findings[index]
         if finding.kind == "person_name":
             placeholder = people.get(index, "Person A")
             trailing = "'s" if re.search(r"'s$", finding.text, re.I) else ""
@@ -173,7 +303,7 @@ def apply(prompt: str, findings: list[Finding], allowed: set[int]) -> Substituti
             identity_map.setdefault(placeholder, finding.text.rstrip("'s").rstrip("'"))
             reason = "a personal name carries ethnicity, gender and social expectation"
         else:
-            replacement = _pronoun_replacement(prompt, span, finding.text)
+            replacement = _pronoun_replacement(prompt, span, finding.text, forms.get(index))
             placeholder = ""
             reason = "a gendered pronoun states the gender of the person it refers to"
             pronoun_style["*"] = (
