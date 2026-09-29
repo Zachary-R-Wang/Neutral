@@ -517,7 +517,27 @@ def _flag(turn: Turn) -> str:
 # One line per kind of change, so it is plain which mechanisms fired. A flat list of
 # every swap buried the rest under the names, and read as though they never ran.
 # Grammar goes last: it is the consequence of the others, not a change of its own.
-_HEADING_ORDER = ("Names", "Descriptions", "Who is asking", "Order", "Grammar")
+_HEADING_ORDER = (
+    "Names",
+    "Descriptions",
+    "Who is asking",
+    "The question",
+    "Your stake",
+    "Order",
+    "Grammar",
+)
+# What the person asking said about their own stake in a request for a verdict.
+_STAKE_KINDS = {
+    "emotion",
+    "effort",
+    "stance",
+    "credential",
+    "social_proof",
+    "ideology",
+    "ownership",
+    "learned",
+    "restructured",
+}
 
 
 def _heading(change) -> str:
@@ -528,10 +548,22 @@ def _heading(change) -> str:
     if change.mechanism == "identity_substitution":
         return "Descriptions" if change.detected_kind in ATTRIBUTE_KINDS else "Names"
     if change.mechanism == "person_neutralisation":
+        if change.detected_kind == "neutral_judgement":
+            return "The question"
+        if change.detected_kind in _STAKE_KINDS:
+            return "Your stake"
         return "Who is asking"
     if change.mechanism == "order_neutralisation":
         return "Order"
     return change.mechanism
+
+
+def _kept_line(turn: Turn) -> str:
+    """What was found and deliberately left, so it does not look like something missed."""
+    if not turn.kept:
+        return ""
+    items = "; ".join(f"<code>{escape(text)}</code> - {escape(why)}" for text, why in turn.kept)
+    return f"<li><span>Kept</span> {items}</li>"
 
 
 def _changes(turn: Turn) -> str:
@@ -559,7 +591,7 @@ def _changes(turn: Turn) -> str:
         + "</li>"
         for heading, pairs in ordered
     )
-    return f'<div class="changes">Changed before sending<ul>{lines}</ul></div>'
+    return f'<div class="changes">Changed before sending<ul>{lines}{_kept_line(turn)}</ul></div>'
 
 
 def _sent(turn: Turn) -> str:

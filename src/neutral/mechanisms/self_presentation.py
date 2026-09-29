@@ -112,6 +112,8 @@ _CLAUSES: tuple[tuple[str, re.Pattern[str]], ...] = (
             r"grad|director|producer|investor|consultant|scientist|analyst|chef|musician|"
             r"artist|professional|poet|journalist|editor|designer|critic)\b"
             rf"|^i(?:'ve|\s+have)\s+been\s+(?:a|an|the)\s+.{{0,40}}?\bfor\s+(?:\d+|\w+)\s+years\b"
+            r"|^i(?:'ve|\s+have)\s+been\s+\w+ing(?:\s+\w+){0,3}\s+(?:for|since)\s+"
+            r"(?:\d+|\w+)(?:\s+years|\s+decades)?\b"
             rf"|^i(?:'ve|\s+have)\s+{_ADV}(?:won|published|built|sold|founded|raised|shipped)\b"
             rf"|^(?:i'm|i am)\s+{_ADV}(?:smart|intelligent|talented|experienced|gifted|"
             r"a fast learner|junior|new to this|a beginner|an expert)\b"
@@ -458,10 +460,10 @@ def find(prompt: str, protected: list[Span]) -> list[Edit]:
         gap = len(re.match(r"[ \t]*", prompt[e.span.end :]).group(0))
         nxt = out[i + 1].span.start if i + 1 < len(out) else len(prompt)
         out[i] = Edit(Span(e.span.start, min(e.span.end + gap, nxt)), "", e.kind, e.detected)
-    return out + _recapitalise(prompt, out)
+    return out + _recapitalise(prompt, out, protected)
 
 
-def _recapitalise(prompt: str, edits: list[Edit]) -> list[Edit]:
+def _recapitalise(prompt: str, edits: list[Edit], protected: list[Span]) -> list[Edit]:
     """A removal at the start of a sentence can leave "but can you review this?" behind:
     the joining word goes too, and the next word takes the capital."""
     extra: list[Edit] = []
@@ -477,6 +479,8 @@ def _recapitalise(prompt: str, edits: list[Edit]) -> list[Edit]:
             continue
         start = e.span.end + len(m.group(1))
         letter = e.span.end + m.start(3)
+        if any(w.start <= letter < w.end for w in protected):
+            continue  # "def f(x)" after a removed sentence is code, and stays as written
         if not m.group(2) and prompt[letter].isupper():
             continue
         span = Span(start, letter + 1)

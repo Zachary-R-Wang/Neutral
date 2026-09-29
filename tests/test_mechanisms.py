@@ -1058,3 +1058,13 @@ class TestMoreShapesOfTheSameThing:
     def test_please_be_brutally_honest_is_a_lead_in(self):
         out = _text("Please be brutally honest: is my novel's first line any good?")
         assert out == "Please be brutally honest: evaluate the novel's first line."
+
+
+class TestCapitalsNeverReachTheWork:
+    def test_code_after_a_removed_sentence_keeps_its_case(self):
+        out = _text(
+            "I think my code is really clean and efficient. Can you confirm? "
+            "I've been coding for twenty years. def f(x): return x"
+        )
+        assert out.endswith("def f(x): return x")
+        assert "twenty years" not in out

@@ -623,3 +623,34 @@ class TestConversationsSurviveWhatTheMechanismsRemove:
         ask(conversation, "Assess Emily Carter.", adapter)
         ask(conversation, "Assess Ravi Menon.", adapter)
         assert all(content for _, content in adapter.histories[-1])
+
+
+class TestThePanelSaysWhatKindOfChangeEachWas:
+    class _Model:
+        model = "demo"
+
+        def complete(self, prompt, *, system=None, history=None):
+            return Completion(text="Noted.", model=self.model, stop_reason="end_turn")
+
+    def test_the_question_and_the_stake_have_their_own_lines(self):
+        conversation = Conversation()
+        ask(
+            conversation,
+            "I think my code is really clean and efficient. Can you confirm? "
+            "I've been coding for twenty years. def f(x): return x",
+            self._Model(),
+        )
+        html = page(conversation)
+        assert "<span>The question</span>" in html
+        assert "<span>Your stake</span>" in html
+
+    def test_what_was_deliberately_kept_is_shown_with_why(self):
+        conversation = Conversation()
+        ask(
+            conversation,
+            "My colleague Priya Raman asked what the legal rules are for firing a "
+            "67-year-old employee.",
+            self._Model(),
+        )
+        html = page(conversation)
+        assert "<span>Kept</span>" in html and "67-year-old" in html
