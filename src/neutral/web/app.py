@@ -91,6 +91,57 @@ async def never_show_a_stack_trace(request: Request, call_next):
         return HTMLResponse(trouble_page(UNEXPECTED), status_code=500)
 
 
+# Sent with every response. The pages load nothing from anywhere else but the typeface
+# (Google Fonts, named on the privacy page), so the policy can be strict: no framing by
+# another site (a connect page inside someone else's frame is how a person is tricked into
+# typing a key), no guessing at content types, reset links kept out of other sites'
+# referrer logs, and scripts from this origin only.
+SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "same-origin",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+    "Content-Security-Policy": (
+        "default-src 'self'; script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data:; "
+        "font-src 'self' data: https://fonts.gstatic.com; "
+        "connect-src 'self'; form-action 'self'; frame-ancestors 'none'; "
+        "base-uri 'none'; object-src 'none'"
+    ),
+}
+
+
+@app.middleware("http")
+async def guard(request: Request, call_next):
+    """Refuse a form sent from another website, and put the headers on every response.
+
+    Session cookies are already SameSite=Lax, which stops most of this. The Origin check
+    is a second lock on the same door: a browser always says where a form came from, and
+    no page on another site has any business posting to this one."""
+    if request.method not in ("GET", "HEAD", "OPTIONS"):
+        origin = request.headers.get("origin")
+        if origin is not None:
+            from urllib.parse import urlparse
+
+            if urlparse(origin).netloc != request.headers.get("host", ""):
+                response = HTMLResponse(
+                    trouble_page(
+                        "That form was sent from another website, so Neutral refused it. "
+                        "If you were using Neutral itself, go back and try again."
+                    ),
+                    status_code=403,
+                )
+                for name, value in SECURITY_HEADERS.items():
+                    response.headers[name] = value
+                return response
+    response = await call_next(request)
+    for name, value in SECURITY_HEADERS.items():
+        response.headers.setdefault(name, value)
+    if PUBLIC:
+        response.headers.setdefault("Strict-Transport-Security", "max-age=31536000")
+    return response
+
+
 # One connection, shared. SQLite serialises writes itself but the Python driver is happier
 # with a lock in front of it, and FastAPI runs these handlers on a threadpool.
 _db_lock = threading.Lock()
@@ -122,6 +173,9 @@ def db():
 # Off by default because a secure cookie is not sent over http://127.0.0.1 either, and
 # nobody should have to discover that while trying to sign in locally.
 PUBLIC = os.environ.get("NEUTRAL_PUBLIC", "").strip().lower() == "true"
+
+MAX_PROMPT_CHARS = 20_000
+MAX_CONVERSATION_CHARS = 100_000
 
 
 def _cookie(response, key: str):
@@ -184,6 +238,27 @@ def send(request: Request, prompt: str = Form(default="")):
         return _go("/connect", key)
 
     text = (prompt or "").strip()
+    # A ceiling on what one request can make the server parse. Past it the rewriting
+    # cannot run reliably, and failing open would send the whole thing unprotected.
+    so_far = sum(len(t.asked) for t in session.conversation.turns)
+    if len(text) > MAX_PROMPT_CHARS:
+        return _html(
+            _conversation_page(
+                session,
+                error=f"That message is {len(text):,} characters long. Neutral takes up to "
+                f"{MAX_PROMPT_CHARS:,} at a time - split it, or trim what the model does not need.",
+            ),
+            key,
+        )
+    if text and so_far + len(text) > MAX_CONVERSATION_CHARS:
+        return _html(
+            _conversation_page(
+                session,
+                error="This conversation is now too long for Neutral to rewrite reliably. "
+                "Start a new one with the New button; nothing from this one is kept.",
+            ),
+            key,
+        )
     if text:
         adapter = build(session.provider, session.api_key, session.model)
         try:
@@ -240,7 +315,7 @@ def signup(request: Request, email: str = Form(default=""), password: str = Form
     # existing, not people mistyping their own address.
     sign_up_limit.record(origin)
     session.adopt(account)
-    return _go("/connect", key)
+    return _go("/connect", sessions.rotate(key))
 
 
 @app.get("/signin", response_class=HTMLResponse)
@@ -279,7 +354,7 @@ def signin(request: Request, email: str = Form(default=""), password: str = Form
 
     sign_in_limit.clear(origin, address)
     session.adopt(account)
-    return _go("/connect", key)
+    return _go("/connect", sessions.rotate(key))
 
 
 @app.post("/signout")
@@ -363,7 +438,7 @@ def reset(request: Request, token: str = Form(default=""), password: str = Form(
 
     sign_in_limit.clear(client_ip(request), f"email:{account.email}")
     session.adopt(account)
-    return _go("/connect", key)
+    return _go("/connect", sessions.rotate(key))
 
 
 # ---------------------------------------------------------------------------

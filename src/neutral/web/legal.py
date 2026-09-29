@@ -151,7 +151,10 @@ Nothing else is kept. Specifically:
 - **One cookie**, holding a random identifier, so the page can find your session again.
   It contains nothing about you and is not used for tracking or analytics.
 
-There is no analytics, no advertising, no third-party script other than a web font.
+There is no analytics, no advertising and no third-party script. The one thing loaded
+from elsewhere is the typeface, from Google Fonts, which means Google sees that your
+browser asked for it - your IP address and browser, as with any website that uses its
+fonts. Nothing you type is sent to Google by this page.
 
 ## Your rights
 

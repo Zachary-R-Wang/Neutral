@@ -30,6 +30,11 @@ COOKIE = "neutral_session"
 # A session with no activity for this long is dropped, key and all.
 IDLE_SECONDS = 8 * 60 * 60
 
+# How many sessions are held at once. Every visit without a cookie makes one, so without a
+# ceiling a script requesting the sign-in page in a loop could fill the server's memory.
+# Past the ceiling the least recently used signed-out sessions go first.
+MAX_SESSIONS = 20_000
+
 
 @dataclass
 class Session:
@@ -87,9 +92,10 @@ class Session:
 class Sessions:
     """A dictionary with an expiry. Not a database, and not meant to become one."""
 
-    def __init__(self, idle_seconds: float = IDLE_SECONDS) -> None:
+    def __init__(self, idle_seconds: float = IDLE_SECONDS, limit: int = MAX_SESSIONS) -> None:
         self._sessions: dict[str, Session] = {}
         self._idle = idle_seconds
+        self._limit = limit
 
     def __len__(self) -> int:
         return len(self._sessions)
@@ -99,18 +105,40 @@ class Sessions:
         for key in stale:
             self._sessions.pop(key, None)
 
+    def _make_room(self) -> None:
+        if len(self._sessions) < self._limit:
+            return
+        by_age = sorted(self._sessions.items(), key=lambda kv: kv[1].touched)
+        anonymous = [k for k, s in by_age if not s.signed_in]
+        for key in (anonymous or [k for k, _ in by_age])[: max(1, self._limit // 10)]:
+            self._sessions.pop(key, None)
+
     def get(self, key: str | None) -> tuple[str, Session]:
-        """Return the session for this cookie, making one if the cookie is new or stale."""
+        """Return the session for this cookie, making one if the cookie is new or stale.
+
+        A cookie the server did not issue - stale after a restart, or planted - is never
+        adopted as the new session's name. Adopting it let whoever chose the value share
+        the session once its owner signed in ("session fixation")."""
         now = time.monotonic()
         self._expire(now)
         if key and key in self._sessions:
             session = self._sessions[key]
             session.touched = now
             return key, session
-        fresh = key or secrets.token_urlsafe(24)
+        self._make_room()
+        fresh = secrets.token_urlsafe(24)
         session = Session()
         self._sessions[fresh] = session
         return fresh, session
+
+    def rotate(self, key: str) -> str:
+        """Give this session a new name, as it signs in. Anyone who knew the old one -
+        from before the person signed in - knows nothing useful now."""
+        session = self._sessions.pop(key, None)
+        fresh = secrets.token_urlsafe(24)
+        if session is not None:
+            self._sessions[fresh] = session
+        return fresh
 
     def drop(self, key: str | None) -> None:
         if key:

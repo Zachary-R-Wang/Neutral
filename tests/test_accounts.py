@@ -22,7 +22,7 @@ from neutral.adapters.base import Completion
 from neutral.adapters.providers import PROVIDERS, looks_like_model
 from neutral.conversation import Conversation
 from neutral.web import app as app_module
-from neutral.web.sessions import Session, Sessions
+from neutral.web.sessions import COOKIE, Session, Sessions
 
 EMAIL = "hiring@example.com"
 PASSWORD = "a-long-enough-password"
@@ -770,3 +770,97 @@ class TestTheKeyIsNeverShownBack:
         body = client.get("/connect").text
         assert "memory for this session only" in body
         assert "not written to disk" in body
+
+
+# ---------------------------------------------------------------------------
+# Hardening, from the review before the code went public (2026-09-28)
+# ---------------------------------------------------------------------------
+
+
+class TestSessionsCannotBeFixed:
+    def test_a_cookie_the_server_never_issued_is_not_adopted(self, client):
+        client.cookies.set(COOKIE, "chosen-by-someone-else")
+        got = client.get("/signin", follow_redirects=False)
+        assert got.cookies.get(COOKIE) not in (None, "chosen-by-someone-else")
+
+    def test_signing_in_changes_the_session_name(self, client):
+        client.get("/signin")
+        before = client.cookies.get(COOKIE)
+        _sign_up(client)
+        assert client.cookies.get(COOKIE) != before
+        client.post("/signout", follow_redirects=False)
+        client.get("/signin")
+        before = client.cookies.get(COOKIE)
+        client.post("/signin", data={"email": EMAIL, "password": PASSWORD})
+        assert client.cookies.get(COOKIE) != before
+
+    def test_there_is_a_ceiling_and_signed_in_sessions_outlast_anonymous_ones(self):
+        from neutral.accounts import Account
+
+        store = Sessions(limit=10)
+        kept, session = store.get(None)
+        session.adopt(Account(1, "a@example.com", "anthropic", ""))
+        for _ in range(50):
+            store.get(None)
+        assert len(store) <= 10
+        assert store.get(kept)[0] == kept
+
+
+class TestTheBrowserIsToldToBeStrict:
+    def test_every_page_carries_the_headers(self, client):
+        for path in ("/signin", "/terms", "/health"):
+            headers = client.get(path).headers
+            assert headers["x-frame-options"] == "DENY"
+            assert "frame-ancestors 'none'" in headers["content-security-policy"]
+            assert headers["x-content-type-options"] == "nosniff"
+            assert headers["referrer-policy"] == "same-origin"
+
+    def test_a_form_from_another_website_is_refused(self, client):
+        got = client.post(
+            "/signin",
+            data={"email": EMAIL, "password": PASSWORD},
+            headers={"origin": "https://evil.example"},
+            follow_redirects=False,
+        )
+        assert got.status_code == 403
+        assert "another website" in got.text
+
+    def test_a_form_from_the_site_itself_is_accepted(self, client):
+        got = client.post(
+            "/signup",
+            data={"email": EMAIL, "password": PASSWORD},
+            headers={"origin": "http://testserver"},
+            follow_redirects=False,
+        )
+        assert got.status_code == 303
+
+
+class TestOneRequestCannotSwampTheServer:
+    def test_an_oversized_message_is_refused_before_anything_is_sent(self, client):
+        _sign_up(client)
+        _connect(client)
+        got = client.post("/", data={"prompt": "word " * 5000})
+        assert "characters long" in got.text
+        assert _Adapter.built == [], "a model was called for a message that was refused"
+
+
+class TestThePolicyAllowsWhatThePagesLoad:
+    """The first version of the content policy blocked the typeface, and the pages quietly
+    fell back to another font. Every outside address a page loads from - a stylesheet, a
+    script, an image - must be one the policy allows."""
+
+    LOADS = re.compile(
+        r'<link[^>]*rel="stylesheet"[^>]*href="(https://[^/"]+)'
+        r'|<link[^>]*href="(https://[^/"]+)[^>]*rel="stylesheet"'
+        r'|<(?:script|img)[^>]*src="(https://[^/"]+)'
+    )
+
+    def test_every_outside_address_is_allowed(self, client):
+        policy = client.get("/signin").headers["content-security-policy"]
+        seen = set()
+        for path in ("/signin", "/signup", "/terms", "/privacy", "/forgot"):
+            for match in self.LOADS.finditer(client.get(path).text):
+                seen.add(next(g for g in match.groups() if g))
+        assert seen, "no outside stylesheet found; the check itself is broken"
+        for origin in seen:
+            assert origin in policy, f"the pages load from {origin}, which the policy blocks"
