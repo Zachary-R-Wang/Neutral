@@ -306,13 +306,22 @@ def _attribute_edits(prompt: str, findings: list[Finding], allowed: set[int]) ->
                     if c.dep_ in ("acl", "relcl") and c.pos_ in ("VERB", "AUX")
                 ]
                 owned = [t for t in head_noun.subtree if follow and t.i < follow[0].i]
-                if follow and all(
-                    is_described(t)
-                    or t.dep_ == "det"
-                    or t.is_punct
-                    or t.lower_ == "of"
-                    or t.like_num
-                    for t in owned
+                # A family noun is made neutral, never deleted: "a 45 year old mom
+                # returning to work" keeps the parent and loses the gender and age.
+                family = head_noun.lower_ in FAMILY_NOUNS or re.match(
+                    r"(?i)(?:mother|father|mom|mum|dad|parent)$", head_noun.text
+                )
+                if (
+                    not family
+                    and follow
+                    and all(
+                        is_described(t)
+                        or t.dep_ == "det"
+                        or t.is_punct
+                        or t.lower_ == "of"
+                        or t.like_num
+                        for t in owned
+                    )
                 ):
                     verb = follow[0]
                     if verb.dep_ == "acl":  # "is [a mother of two] trying to"
@@ -402,7 +411,21 @@ def _attribute_edits(prompt: str, findings: list[Finding], allowed: set[int]) ->
         if finding.kind == "family" and re.match(
             r"(?i)(?:mother|father|mom|mum|dad|parent)\s+of\b", finding.text
         ):
-            neutral = "person"
+            # "Harvard MBA, 10 years at McKinsey, mother of three." - an item in a list
+            # goes, comma and all. Elsewhere the phrase is the person, and becomes one.
+            before = re.search(r",\s*$", prompt[: finding.span.start])
+            if before and re.match(r"\s*(?:[.,;]|$)", prompt[finding.span.end :]):
+                edits.append(
+                    _Edit(
+                        Span(before.start(), finding.span.end),
+                        "",
+                        finding.text,
+                        finding.kind,
+                        reason,
+                    )
+                )
+                continue
+            neutral = re.sub(r"(?i)^(?:mother|father|mom|mum|dad|parent)", "parent", finding.text)
         if neutral:
             edits.append(
                 _Edit(

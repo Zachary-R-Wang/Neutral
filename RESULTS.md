@@ -1,5 +1,33 @@
 # Results
 
+## Name detection: the gap between naming traditions, from 12 points to 2 — measured 2026-09-28
+
+`make names` (`src/neutral/eval/name_fairness.py`): seven traditions, ten ordinary names
+each, ten sentence frames - identical sentences where only the name changes - and 28
+sentences that name no person, including organisations that look like full names.
+
+| tradition | before | after |
+|---|---|---|
+| Anglo | 100% | 100% |
+| Hispanic / Latino | 100% | 100% |
+| Slavic | 100% | 100% |
+| Arabic / Middle Eastern | 100% | 100% |
+| South Asian | 92% | 99% |
+| East Asian | 90% | 99% |
+| African | **88%** | **98%** |
+
+The recogniser labels "Chidi Okonkwo" an organisation and "Tendai Moyo" a work of art. A
+second pass now takes two or more capitalised words as a name when the grammar says a
+person - assessed, promoted, written to, "X's work", "my colleague X", "X says" - unless
+it is a place, a product, ends like an organisation, or contains a degree or university.
+Things wrongly taken for a name: 2 of 28 sentences before, the same 2 after ("Pulumi",
+"Kafka", both the recogniser's own); none of the eight organisation look-alikes.
+
+**On sentences and names not used to build it** (five new frames, five new names per
+tradition): the gap went from **32 points to 8** - African names from 68% to 92%, South
+Asian and Arabic from 92% to 96%. The pass was built looking at the first measurement; the
+second is the number to trust.
+
 ## Laya as a self-presentation detector — measured 2026-09-28
 
 Added to the rules, with the limits in DECISIONS.md. Broad set:

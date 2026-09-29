@@ -14,7 +14,7 @@ PY := .venv/bin/python
 RUN := PYTHONPATH=src $(PY)
 
 .DEFAULT_GOAL := help
-.PHONY: help dev test eval lint dataset clean deploy email
+.PHONY: help dev test eval lint dataset clean deploy email relevance names
 
 # Which Fly app `make deploy` and `make email` act on: read from fly.toml, so a copy of
 # Neutral deployed under another name needs only fly.toml changed. SITE and MAIL_FROM can
@@ -33,6 +33,7 @@ help:
 	@echo "    make eval     Measure divergence and write a report."
 	@echo "    make dataset  Print the matched prompt pairs to check them by eye."
 	@echo "    make relevance  What Neutral changes, keeps and holds. Free; no model."
+	@echo "    make names    How evenly names are found across naming traditions. Free."
 	@echo "    make lint     Check code style."
 	@echo "    make deploy   Test, then put the current version on neutralai.app."
 	@echo "    make email    Connect Resend, so password reset emails can be sent."
@@ -68,6 +69,9 @@ eval: .venv
 
 relevance: .venv
 	@$(RUN) -m neutral.eval.cli relevance $(ARGS)
+
+names: .venv
+	@$(RUN) -m neutral.eval.name_fairness
 
 dataset: .venv
 	@$(RUN) -m neutral.eval.cli dataset $(ARGS)

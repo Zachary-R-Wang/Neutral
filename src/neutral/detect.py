@@ -369,5 +369,171 @@ def detect_names_local(prompt: str) -> list[Finding]:
         taken.append((start, end))
         findings.append(Finding(Span(start, end), text, "person_name"))
 
+    for span in _people_by_their_grammar(prompt, taken):
+        taken.append((span.start, span.end))
+        findings.append(Finding(span, prompt[span.start : span.end], "person_name"))
+
     findings.extend(_repeat_mentions(prompt, findings))
     return sorted(findings, key=lambda f: f.span.start)
+
+
+# ---------------------------------------------------------------------------------------
+# A second pass, for the names the recogniser misses
+# ---------------------------------------------------------------------------------------
+#
+# The recogniser finds African and East Asian names less often than others: it labels
+# "Chidi Okonkwo" an organisation and "Tendai Moyo" a work of art (measured with
+# `make names`). Neutral cannot remove a name it does not see, so this pass looks at what
+# the grammar says instead: two or more capitalised words that are assessed, promoted,
+# written to, or say and join things are a person, whatever the recogniser thought.
+
+# What people are, and are not, in the grammar around a name.
+_PERSON_VERBS = set(
+    """assess evaluate promote hire fire review rate compare tell ask thank pay mentor coach
+    meet interview email call praise recommend invite congratulate reject onboard manage
+    train support trust text message contact warn remind reward discipline dismiss
+    replace nominate""".split()
+)
+_PERSON_SUBJECT_VERBS = set(
+    """say tell join leave quit think want ask feel manage lead report work miss complain
+    argue agree believe deliver ship write send reply mention claim insist refuse apply
+    resign start retire struggle keep""".split()
+)
+_TO_A_PERSON = set(
+    """review feedback email letter message note reference recommendation offer promotion
+    raise rejection reply response meeting call conversation apology bio introduction
+    appraisal evaluation assessment rating""".split()
+)
+_WHAT_A_PERSON_HAS = set(
+    """work performance review promotion manager team salary feedback code essay report idea
+    plan proposal output attitude behaviour behavior contribution role resume cv application
+    interview presentation deadline project reviews skills record""".split()
+)
+_BEFORE_A_PERSON = set(
+    """colleague coworker co-worker manager boss report candidate employee intern hire
+    friend client mentee mentor teammate lead director applicant contractor""".split()
+)
+# What an organisation, product or place ends or starts with.
+_ORG_END = set(
+    """bank group inc ltd llc corp corporation company co capital partners labs cloud
+    services systems technologies tech university college school institute foundation
+    health media studio studios games airlines motors energy pharma face ai analytics
+    software solutions consulting holdings ventures sachs stanley azure office""".split()
+)
+_PLACE_START = set(
+    """new san los las saint st north south east west google amazon microsoft apple meta
+    hugging deutsche goldman morgan visual adobe oracle ibm""".split()
+)
+# Words that are never part of a person's name: degrees, titles of office, universities.
+_NEVER_IN_A_NAME = set(
+    """mba phd ba bsc msc ma md jd llm cpa cfa ceo cto cfo coo vp svp evp hr it
+    harvard stanford mit oxford cambridge yale princeton berkeley columbia wharton
+    insead lse ucla nyu university college school""".split()
+)
+_NOT_A_PERSON_TYPE = {
+    "GPE",
+    "LOC",
+    "FAC",
+    "PRODUCT",
+    "EVENT",
+    "LAW",
+    "LANGUAGE",
+    "NORP",
+    "DATE",
+    "TIME",
+    "MONEY",
+    "QUANTITY",
+    "CARDINAL",
+    "ORDINAL",
+    "PERCENT",
+}
+
+
+def _people_by_their_grammar(prompt: str, taken: list[tuple[int, int]]) -> list[Span]:
+    doc = parse(prompt)
+    if doc is None:
+        return []
+    found: list[Span] = []
+    i = 0
+    tokens = list(doc)
+    while i < len(tokens):
+        if tokens[i].pos_ != "PROPN" or not tokens[i].text[:1].isupper():
+            i += 1
+            continue
+        j = i
+        # A run of proper nouns, allowing "Min-ji" (a hyphen and a lower-case second half).
+        while j + 1 < len(tokens) and (
+            (tokens[j + 1].pos_ == "PROPN" and tokens[j + 1].text[:1].isupper())
+            or (tokens[j + 1].text == "-" and not tokens[j].whitespace_)
+            or (
+                tokens[j].text == "-" and tokens[j + 1].text.isalpha() and not tokens[j].whitespace_
+            )
+        ):
+            j += 1
+        run = tokens[i : j + 1]
+        i = j + 1
+        words = [t for t in run if t.text != "-" and not (t.i > 0 and doc[t.i - 1].text == "-")]
+        if len(words) < 2 or len(words) > 4:
+            continue
+        start, end = run[0].idx, run[-1].idx + len(run[-1].text)
+        if any(start < e and end > s for s, e in taken):
+            continue
+        if any(t.ent_type_ in _NOT_A_PERSON_TYPE for t in run):
+            continue
+        if run[-1].lower_ in _ORG_END or run[0].lower_ in _PLACE_START:
+            continue
+        if any(t.lower_.strip(".") in _NEVER_IN_A_NAME for t in run):
+            continue
+        if _bare(run[0].text) in _NOT_NAMES:
+            continue
+        if _a_person_by_grammar(doc, run):
+            found.append(Span(start, end))
+    return found
+
+
+def _a_person_by_grammar(doc, run) -> bool:
+    head = (
+        max(run, key=lambda t: t.i) if all(t.head in run or t is run[-1] for t in run) else run[-1]
+    )
+    before = doc[run[0].i - 1] if run[0].i > 0 else None
+    if before is not None and before.lower_ in _BEFORE_A_PERSON | {
+        "mr",
+        "ms",
+        "mrs",
+        "dr",
+        "mr.",
+        "ms.",
+        "mrs.",
+        "dr.",
+    }:
+        return True
+    # "Assess Priya Raman for promotion" - the parser sometimes loses the verb; the word
+    # in front still says what is being done to whom.
+    if before is not None and before.lemma_.lower() in _PERSON_VERBS:
+        return True
+    parent = head.head
+    if head.dep_ in ("dobj", "dative") and parent.lemma_.lower() in _PERSON_VERBS:
+        return True
+    if head.dep_ in ("nsubj", "nsubjpass") and parent.lemma_.lower() in (
+        _PERSON_SUBJECT_VERBS | _PERSON_VERBS
+    ):
+        return True
+    if head.dep_ == "pobj" and parent.lower_ in ("for", "to", "with", "from", "about", "by"):
+        governor = parent.head
+        if governor.lemma_.lower() in _TO_A_PERSON | _PERSON_VERBS | {
+            "talk",
+            "speak",
+            "write",
+            "reply",
+            "send",
+            "say",
+            "give",
+            "explain",
+            "compare",
+        }:
+            return True
+    if head.dep_ == "poss" and parent.lemma_.lower() in _WHAT_A_PERSON_HAS:
+        return True
+    if head.dep_ == "appos" and parent.lemma_.lower() in _BEFORE_A_PERSON:
+        return True
+    return False

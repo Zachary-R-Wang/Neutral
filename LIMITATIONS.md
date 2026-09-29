@@ -73,10 +73,13 @@ A think". A sentence the parser misreads can still come out wrong.
 
 ## Neutral protects some people better than others
 
-Its name detection finds African and East Asian names about 18 percentage points less
-often than Hispanic or Slavic ones, measured over identical sentences where only the name
-changes. Neutral cannot remove a name it does not see, so on those prompts it does less
-of what it claims to do.
+Its name detection used to find African and East Asian names about 12 to 18 percentage
+points less often than others, measured over identical sentences where only the name
+changes. A second pass that reads the grammar around a name closed most of it: on
+sentences and names it was not built on, the gap fell from 32 points to 8 (RESULTS.md).
+Eight points is still a gap. Neutral cannot remove a name it does not see, so on those
+prompts it still does less of what it claims to do, and a single given name on its own
+("ask Chidi") gets no help from the second pass.
 
 This is the most uncomfortable thing in this file and it belongs at the top of it. A tool
 sold on reducing demographic bias has a component whose accuracy varies by exactly the

@@ -98,7 +98,9 @@ _RULES: tuple[tuple[tuple[str, ...], str, re.Pattern[str]], ...] = (
     ),
     (
         (FAMILY,),
-        "the request is about parental or family leave",
+        # Family words are made neutral ("mom" -> "parent"), which keeps the parenthood;
+        # this keeps the word itself only where the parent's sex is what the rules turn on.
+        "the request is about maternity, paternity or adoption rules",
         re.compile(r"\b(?:maternity|paternity|parental|adoption)\b", re.I),
     ),
     (

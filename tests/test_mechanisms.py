@@ -232,6 +232,25 @@ class TestTheDetectorIsNotEquallyGoodAtEveryName:
     def test_detection_is_good_but_not_perfect_on_common_anglo_names(self):
         assert self._recall(["Emily Carter", "Sarah Bennett", "Oliver Hayes"]) >= 0.75
 
+    def test_the_gap_is_small_on_the_full_measurement(self):
+        """`make names`: seven traditions, ten names each, ten sentence frames. Before the
+        second pass the gap was 12 points (African names 88%); after it, 2."""
+        from neutral.eval.name_fairness import false_alarms, recall_by_tradition
+
+        recall = recall_by_tradition(detect_names_local)
+        assert max(recall.values()) - min(recall.values()) <= 0.05, recall
+        assert min(recall.values()) >= 0.95, recall
+        wrongly = {text for _, text in false_alarms(detect_names_local)}
+        assert wrongly <= {"Pulumi", "Kafka"}, f"new things taken for names: {wrongly}"
+
+    def test_organisations_that_look_like_names_are_not_taken(self):
+        for text in (
+            "Compare Deutsche Bank with Goldman Sachs for the bond issue.",
+            "Assess Google Cloud for our deployment pipeline.",
+            "Summarize the strengths of this candidate: Harvard MBA, 10 years at McKinsey.",
+        ):
+            assert detect_names_local(text) == [], text
+
     def test_the_gap_between_naming_traditions_is_recorded_not_hidden(self):
         """If this ever fails because the gap closed, that is good news - update it."""
         anglo = self._recall(["Emily Carter", "Sarah Bennett", "Oliver Hayes", "Rachel Nolan"])
@@ -900,8 +919,11 @@ class TestTheBroadSetDoesNotSlideBack:
         return measure_broad(path, split)
 
     def test_dev(self):
+        # 75, not 76, since 2026-09-28: "mother of two" now becomes "parent of two" rather
+        # than disappearing, which keeps the parenthood where it matters ("returning to
+        # work after 8 years") and costs the one item labelled for removal.
         r = self._measure("dev")
-        assert r.removed.passed >= 76 and r.kept.passed >= 90
+        assert r.removed.passed >= 75 and r.kept.passed >= 90
 
     def test_held_out(self):
         r = self._measure("test")
