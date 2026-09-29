@@ -5,6 +5,53 @@ minds. Newest first.
 
 ---
 
+## 2026-09-28 — The final review before the code went public
+
+**The instruction.** "Improve it as much as possible one last time. Anything you catch or
+anything you think could improve, do that now through an extremely thorough check."
+
+**How it was checked.** A batch of prompts nobody had tried, three multi-turn
+conversations through the website's own path, a security read of the web app now that
+anyone can read its code, a real browser against the pages, the name-fairness
+measurement rebuilt as `make names`, and every public document read against the code.
+
+**What it found, and what was done.**
+
+- *Questions about groups were rewritten into different questions.* "Are women worse at
+  math than men?" went out as "Are people worse at math than people?". A description on a
+  plural with nothing pointing at particular people names the group the question is
+  about; it now stays (`gate.about_a_group`).
+- *Conversations broke.* A message that was all self-presentation was sent as an empty
+  string; the removal took the separator between turns with it, so the next turn went out
+  unprotected; and a failed turn's empty reply stayed in the history, which makes
+  providers refuse every later turn. Nothing is sent when nothing is left, the separator
+  is protected, and turns without a reply are left out of the history.
+- *A dozen phrasing bugs:* a situation after "I think" deleted as if it were a verdict;
+  the age in "is it too late?" removed; sex in a workout plan and "mom" in a birthday
+  message neutralised; "Age: 34" in a pasted form missed; "Give me" giving away who
+  Person A is; "I've been told it's great", "Is it efficient?", "I've been coding for
+  twenty years" missed; code capitalised after a removed sentence.
+- *Family words are made neutral, never deleted.* "A 45 year old mom returning to work"
+  now keeps "parent". This costs one item on the broad set's built-against half (75 of
+  81, from 76): "mother of two" was labelled for removal and "parent of two" still counts.
+- *Names.* A second pass reads the grammar around a name the recogniser missed. The gap
+  between naming traditions fell from 12 points to 2, and from 32 to 8 on sentences and
+  names not used to build it.
+- *The web app.* Session fixation, unbounded session memory, no security headers, no
+  check on where a form came from, and no size limit - all fixed (see the commit, and
+  README). The first content policy blocked the typeface; a test now ties the policy to
+  what the pages actually load, and the privacy page names Google Fonts.
+- *Public documents.* LIMITATIONS.md and MECHANISMS.md described things that were no
+  longer true; both now match the code. GitHub runs the style checks, every test and the
+  free measurements on every push.
+
+**Not done, and why.** Seniority is still not removed: how senior someone is often
+changes what good advice looks like, and a rule would damage those answers. "We" and
+"our" are left as written. Mechanism 4 is still unbuilt. And the measurement that
+matters - whether any of this changes a model's answers - still has not been made.
+
+---
+
 ## 2026-09-28 — Laya, made to work: a learned detector for self-presentation
 
 **The instruction.** "If a mechanism is not effective, your first instinct should not be

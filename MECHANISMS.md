@@ -42,61 +42,81 @@ which is why it is the first mechanism.
 - Placeholders are stable within a request: the same person is always Person A.
 - The mapping lives in memory for one request and is discarded (S5).
 - Reversed on the way out, so the user reads real names again.
+- Names are found by a statistical recogniser, then by a second pass that reads the
+  grammar - "Assess Chidi Okonkwo", "Tendai Moyo's work" - because the recogniser misses
+  African and East Asian names more often (`make names`, RESULTS.md).
+- Gendered pronouns become "they", "them", "their", with the verbs made to agree ("she
+  takes" -> "they take", "she's" -> "they're").
 
-## Mechanism 2 — Order neutralisation (descriptive pairs)
+### Descriptions
 
-When a prompt describes an interaction between two or more people, the *grammar* leaks
-which one the user is, even after the names are gone.
+Mechanism 1 also covers descriptions of a person: age ("58-year-old", "aged 26", "in her
+forties", "They are 24.", "Age: 34" in a pasted form), gender words ("female", "woman",
+"actress", "guy"), family roles ("mom", "wife"), nationality, ethnicity and race,
+religion, sexual orientation, appearance ("pretty") and class markers
+("Harvard-educated"). Only where they describe a person: "a young founder", not "a young
+company"; "an Indian applicant", not "Indian food".
 
-If every sentence reads "Person A did X to Person B", the model infers that Person A is
-the user. Two rules fix it:
+- A gendered or family noun becomes its neutral counterpart ("woman" -> "person", "mom"
+  -> "parent", "mother of two" -> "parent of two"), so the relationship survives.
+- Everything else is removed with the grammar put right: "an 18 year old model" -> "a
+  model"; "He's Russian and seems honest" -> "They seem honest"; "Our CEO, a
+  Harvard-educated woman in her 40s, wants" -> "Our CEO wants".
 
-1. **Alternate the grammatical subject.** "Person A did this to Person B" is followed by
-   "Person B was affected in this way by Person A". The pair of people alternates which
-   one holds the subject position.
-2. **Randomise pair order.** Across the prompt, the number of sentences leading with
-   Person A and the number leading with Person B are equal. When the count is odd, one
-   side gets the extra sentence, chosen at random.
+The relevance gate (`gate.py`) keeps a description when the request is about that kind of
+thing - the law, a name, dress, fitness, discrimination, a personal message, an
+announcement - and when it names a group the question is about ("Are women worse at
+math than men?" is sent as asked).
 
-That second rule is precise enough to be a test, and it will be one: *count(A-first) and
-count(B-first) differ by 0 when the total is even, and by exactly 1 when it is odd.*
+## Mechanism 2 — Order neutralisation
 
-### Descriptions (added 2026-09-28)
+When a prompt describes two people, the order and the grammar leak which one the user
+identifies with, even after the names are gone.
 
-Mechanism 1 also covers descriptions of a person: age ("58-year-old", "aged 26", "in
-her forties", "They are 24."), gender words ("female", "woman", "actress"), family roles
-("mom", "wife"), nationality, ethnicity and race, religion, and sexual orientation. Only
-where they describe a person: "a young founder", not "a young company"; "an Indian
-applicant", not "Indian food".
+- **Who is named first.** "Person A and Person B" is swapped on a coin seeded from the
+  rewritten text, so the two halves of a matched pair always get the same toss.
+- **Who is the subject.** On the same kind of coin, "Should Greg replace Priya?" becomes
+  "Should Priya be replaced by Greg?" - the other person as subject, the facts unchanged.
+  Only for about sixty verbs whose passive is written down, in simple sentences where the
+  parser is unambiguous about who acts on whom.
 
-A gendered noun becomes its neutral counterpart ("woman" -> "person", "mom" -> "parent");
-everything else is removed and the article corrected ("an 18 year old model" -> "a
-model"). The relevance gate (`gate.py`) keeps a description when the request is about
-that kind of thing: the law, a name, dress, discrimination, an announcement.
+Roles never move: "Should Priya replace Greg?" and "Should Greg replace Priya?" are
+different questions (DECISIONS.md, 2026-09-26).
 
 ## Mechanism 3 — Person neutralisation
 
 First-person framing tells the model the user is the author or the subject, which is the
 trigger for favourable treatment.
 
-- A claim to have made the thing being judged: "I wrote" → "the author wrote", "my
-  essay" → "the author's essay".
-- Every other self-reference becomes one more person, labelled like the people Mechanism
-  1 has already named. "I think my manager Priya Raman is unfair to me" → "Person B
-  thinks Person B's manager Person A is unfair to Person B". The verbs are made to agree
-  ("Do I" → "Does Person B", "I'm" → "Person B is"). Never "the asker" or "the user":
-  a label that says it is the person typing gives away what this exists to hide.
-- Quoted or indented work is never touched; that is the thing being assessed.
-- Gendered pronouns become "they"/"them", or the sentence is rewritten to avoid a pronoun
-  where that reads better.
-- Relationship words carry the same load as pronouns. "My boyfriend" states the partner's
-  gender and implies the user's. "boy" additionally states age.
-- Reversed on the way out: the answer comes back in second person, so the user reads
-  "your essay", not "the author's essay", and "You should talk to your manager", not
-  "Person B should talk to their manager". A "them" in the asker's own clause ("Person B
-  should tell them") is somebody else, and is left alone.
+- **"I" becomes somebody else.** Every self-reference becomes one more person, labelled
+  like the people Mechanism 1 has named: "I think my manager Priya Raman is unfair to me"
+  -> "Person B thinks Person B's manager Person A is unfair to Person B", with the verbs
+  made to agree. Never "the asker" or "the user": a label that says it is the person
+  typing gives away what this exists to hide. "Give me" loses its "me" when the asker is
+  labelled elsewhere, so the label cannot be traced back.
+- **A role without an "I".** "20 best questions to ask as a philosopher" -> "20 best
+  philosophical questions to ask"; "how to give feedback as a new manager" -> "how a new
+  manager should give feedback".
+- **A request for a verdict is asked without one** (`neutral_judgement.py`). "I think my
+  code is really clean and efficient. Can you confirm?" -> "Evaluate the cleanliness and
+  efficiency of the code." No owner, no intensifier, no built-in answer, no yes/no.
+- **What the asker says about their stake goes** (`self_presentation.py`), when a
+  verdict is asked for: "I spent three weeks on it", "my mom says it's perfect", "I'm a
+  published author", "I've been coding for twenty years", "I'm a proud conservative". Where
+  a line carries the thing being judged it is restated: "I've decided to cut the budget"
+  -> "The plan is to cut the budget". An optional learned detector, on the Laya decision
+  model, catches phrasings the rules have no word for.
+- **Authorship.** "I wrote this" and "a colleague wrote this" both become "This is the
+  memo" in a request for a verdict, and "the author wrote" elsewhere - so the two halves
+  of a matched pair become the same prompt.
+- Reversed on the way out: "Person B" comes back as "you", with the grammar turned round.
 
-## Mechanism 4 — Comparison framing (opt-in)
+## The work being assessed
+
+Quoted text, code, indented blocks and anything after "Essay:", "Plan:" and similar is
+never edited by any mechanism except name substitution (`work.py`).
+
+## Mechanism 4 — Comparison framing (opt-in) — not yet built
 
 The user's text is assessed alongside other items so the model takes the role of assessor
 rather than author.

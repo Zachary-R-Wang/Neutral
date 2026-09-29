@@ -1,0 +1,29 @@
+# Every push and pull request runs the same checks `make deploy` runs before anything
+# reaches the live site: code style, then every test, including the safety invariants,
+# then the free measurements - so a change that makes Neutral remove less, or keep what
+# it must not, shows up in the pull request rather than after it.
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Style
+        run: make lint
+      - name: Tests, including the safety invariants
+        run: make test
+      - name: What Neutral changes, keeps and holds
+        run: make relevance
+      - name: How evenly names are found
+        run: make names

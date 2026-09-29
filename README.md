@@ -1,6 +1,9 @@
 # Neutral
 
-Neutral sits between a person and a large language model. Before a prompt reaches the
+[![tests](https://github.com/Zachary-R-Wang/Neutral/actions/workflows/tests.yml/badge.svg)](https://github.com/Zachary-R-Wang/Neutral/actions/workflows/tests.yml)
+
+Neutral sits between a person and a large language model. Try it at
+[neutralai.app](https://neutralai.app) with your own API key, or run your own copy. Before a prompt reaches the
 model, it removes what tells the model **who is asking** or **who is being discussed** -
 when the task does not need it - and it restores natural language in the answer.
 
@@ -34,6 +37,7 @@ And what it deliberately keeps, because the identity is the question:
 | What are the legal rules on firing a 67-year-old employee in the UK? | "67-year-old" - the age is what the law turns on |
 | How do I pronounce Siobhan Ní Bhriain's name? | the name - it is the question ("I" still becomes a label) |
 | How should a Black man handle being pulled over by police on the way to an interview? | "Black man" - race is load-bearing for the answer |
+| Are women worse at math than men? | everything - the question is about the group |
 | Our warehouse wants to let Tyler, who is 16, drive the forklift. Is that allowed? | everything - identity matters for **safety**, so the prompt is never rewritten |
 
 The answer comes back with names put back and addressed to you ("You should talk to your
@@ -91,16 +95,24 @@ Each is enforced by tests in `tests/test_invariants.py` that are never skipped.
 
 The full specification is [CLAUDE.md](CLAUDE.md).
 
+The web app itself: sessions named only by the server and renamed at sign-in, passwords
+hashed with scrypt, reset links stored only as hashes and valid for an hour, rate limits
+on sign-in, sign-up and reset, forms from other websites refused, a strict content
+policy, and a size limit on what one request can make the server process.
+
 ## Status
 
 What has been measured, all of it in [RESULTS.md](RESULTS.md):
 
 - On 90 prompts from everything people ask - half built against, half held out and never
-  tuned to - Neutral removes 94% and 79% of what the task does not need, and keeps
+  tuned to - Neutral removes 93% and 79% of what the task does not need, and keeps
   everything the task needs on the first half and 63 of 65 things on the second.
 - A held-out set of 26 safety-relevant prompts is sent untouched - after the first
   version of the safety rules let 19 of them through. That finding, and the fix, are in
   RESULTS.md.
+- Names from every naming tradition are found about equally often: the gap between the
+  best- and worst-served traditions was 12 points (African names found 88% of the time)
+  and is now 2, and on sentences and names not used to build the fix, 32 points became 8.
 
 What has **not** been measured: whether any of this changes the model's answers. The
 harness for that exists (`make eval`: matched prompt pairs, several runs each, a separate
@@ -132,6 +144,7 @@ xAI and DeepSeek.
 | `make dev` | starts the app at http://127.0.0.1:8000 | only the model calls you make |
 | `make test` | runs every test, including the safety invariants | no |
 | `make relevance` | shows what Neutral changes, keeps and holds on the labelled sets | no - no model is called |
+| `make names` | how evenly names are found across seven naming traditions | no |
 | `make dataset` | prints the matched prompt pairs used for measurement | no |
 | `make eval` | measures bias with and without Neutral against a live model | yes - see [COSTS.md](COSTS.md); needs a key in `.env` (copy `.env.example`) |
 
@@ -172,7 +185,8 @@ from the labelled sentences by `tools/train_self_presentation.py`.
 
 ## Contributing
 
-Issues and pull requests are welcome. Three rules the project keeps:
+Issues and pull requests are welcome; every pull request runs the style checks, every
+test and the free measurements automatically. Three rules the project keeps:
 
 - The safety tests are never skipped, weakened or mocked around. If a feature cannot be
   built within them, say so in the issue.
