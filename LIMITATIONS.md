@@ -49,10 +49,11 @@ without naming the domain ("what should I get my wife for her birthday?" - "wife
 "spouse") loses something. And a request that mentions the law in passing keeps every
 description in it.
 
-What is not caught at all: origin stated as a phrase ("she's from Lagos", "born in
-India"), appearance ("attractive", "overweight"), class and schooling markers, seniority,
-and length of career. Descriptions are not put back into the answer: the model says "the
-person" or "your spouse", and the answer reads that way.
+What is still not caught: where someone is from, said as a sentence of its own ("she's
+from Lagos", "born in India" - "an immigrant from Mexico" is caught); appearance and class
+beyond the words listed in `detect_attributes.py`; seniority and length of career (below).
+Descriptions are not put back into the answer: the model says "the person" or "your
+spouse", and the answer reads that way.
 
 A safety rule holds any prompt containing "student", because a student can be a child.
 University students are mostly adults, so prompts about them are sent unchanged. That is
@@ -86,19 +87,19 @@ written into this project. A detector trained on names from a wider range of tra
 or a model-based detector called per request, would close it. The second is already
 supported by the pipeline and costs money per prompt, which is why it is not the default.
 
-## Age and seniority are not handled at all
+## Seniority, and length of career, are not handled
 
-Mechanism 1 substitutes names. Mechanism 3 turns the person asking into a third party.
-Neither touches what is said about that person: "I am 58" becomes "Person A is 58", and
-the age is still there. On the evaluation dataset that is 18 of 70 pairs, a
-quarter of it, where Neutral does nothing whatsoever.
+Since 2026-09-28 a stated age is removed in most of the ways people write one ("a
+58-year-old", "aged 26", "in her forties", "They are 24.") unless the question is about
+age. Seniority is not: "a first-time team lead" and "a twenty-year division head" both
+reach the model as written, and so does "three years into their career". On the
+evaluation dataset that leaves 14 of 70 pairs where Neutral cannot make the two halves
+the same.
 
-CLAUDE.md §1 promises to reduce bias from "race, gender, age, nationality or seniority".
-The four mechanisms in §7 cover names, ordering, grammatical person, and comparison
-framing. Age and seniority stated as self-description fall in the gap between the promise
-and the plan, and closing it is a decision about the product, not a missing function:
-often that context is load-bearing for the answer, which is what the relevance gate in
-Phase 2 exists to decide.
+This is a decision rather than a gap in the code. How senior someone is often changes
+what good advice looks like, and a rule that removed it everywhere would damage those
+answers. The relevance gate would have to learn when it does not - which needs real
+prompts to learn from.
 
 ## The model lists will go stale again
 
@@ -144,18 +145,20 @@ page says so plainly and points at a contact address rather than pretending a li
 its way — but on such an installation, a forgotten password is still a dead account until
 somebody fixes it by hand.
 
-**Turning it on** takes about ten minutes, and only the founder can do it, because it
-needs his accounts:
+**Turning it on** takes about ten minutes, and only whoever runs the deployment can do
+it, because it needs their own accounts:
 
 1. Sign up at resend.com.
-2. In Resend, go to **Domains → Add Domain** and enter `neutralai.app`. It shows three or
-   four DNS records.
-3. In Porkbun, open `neutralai.app` → **DNS** and add each record exactly as Resend shows
-   it. Leave the existing A and AAAA records alone - those are what keep the site up.
+2. In Resend, go to **Domains → Add Domain** and enter your domain (`neutralai.app` for
+   the live copy). It shows three or four DNS records.
+3. At whoever sells you the domain (Porkbun, for neutralai.app), open its **DNS** settings
+   and add each record exactly as Resend shows it. Leave the existing A and AAAA records
+   alone - those are what keep the site up.
 4. Back in Resend, press **Verify**. It can take a few minutes to turn green.
 5. In Resend, go to **API Keys → Create API Key**, and copy it. It starts `re_`.
 6. In a terminal in this project, run `make email` and paste the key when asked. Nothing
-   shows while you paste, on purpose.
+   shows while you paste, on purpose. For your own domain:
+   `make email SITE=https://your.domain MAIL_FROM="Neutral <noreply@your.domain>"`.
 
 Until then, a locked-out account can be let back in by generating a single-use reset link
 on the server, which does not need email - but that is a person doing it by hand.
@@ -273,11 +276,11 @@ see what was actually said.
 Twelve pairs per category. That is enough to detect a large effect and not enough to
 detect a small one, and it will not support confident claims about subgroups.
 
-## One provider
+## Measured on one model at most
 
-Only Anthropic models are wired up. The adapter boundary exists so a second provider can
-be added without touching anything else, but until one is, "Neutral reduces divergence"
-means "on the model we tested".
+The app connects to five providers (Anthropic, OpenAI, Google, xAI and DeepSeek), and the
+harness can measure any of them. But a measurement is of one model, and no result here
+says anything about a model that was not the one measured.
 
 ## The judge is itself a language model
 
@@ -285,7 +288,10 @@ Scoring uses a model with a fixed rubric, run independently on each answer and b
 which variant it came from. That removes the most obvious failure modes. It does not make
 the judge unbiased — a judge could plausibly share the biases of the model being measured.
 
-## Nothing here has been measured yet
+## The one measurement that matters has not been made
 
-At the time of writing, no baseline has been run. This file will be revised once there
-are numbers, and the revision will be dated.
+What Neutral does to a prompt is measured, on several labelled sets, every time
+`make relevance` runs. Whether that changes what a model answers is not: the one live
+baseline attempt was not usable (RESULTS.md), and no run with Neutral in the path exists
+yet. Until one does, nothing here shows that Neutral reduces bias - only that it removes
+what it was built to remove. This section will be revised, with a date, when that changes.

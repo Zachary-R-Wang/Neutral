@@ -139,6 +139,7 @@ _CLAUSES: tuple[tuple[str, re.Pattern[str]], ...] = (
             r".*\b(?:say|says|said|told|think|thinks|thought|agree|agrees|agreed|love|loves|"
             r"loved|call|calls)\b"
             r"|^(?:everyone|everybody|people)\s+(?:say|says|tell|tells|think|thinks|love|loves)\b"
+            r"|^i(?:'ve|\s+have)?\s+(?:been\s+|already\s+been\s+)?(?:told|assured|informed)\b"
         ),
     ),
 )
@@ -147,6 +148,21 @@ _CLAUSES: tuple[tuple[str, re.Pattern[str]], ...] = (
 _VERDICT = re.compile(
     r"\b(?:great|perfect|brilliant|amazing|a hit|good|best|excellent|genius|fantastic|"
     r"incredible|yes|agree|agrees|love|loves|right|strong|ready)\b"
+)
+# What makes "I think ..." a verdict rather than a situation: "I think it's the best thing
+# I've written" is the asker's verdict; "I think I'm going to be late" is the question.
+_JUDGED = re.compile(
+    r"\b(?:great|perfect|brilliant|amazing|good|better|best|worse|worst|excellent|genius|"
+    r"fantastic|incredible|flawless|right|wrong|correct|strong|weak|ready|clean|cleaner|"
+    r"efficient|valid|fair|unfair|funny|catchy|original|realistic|solid|impressive|"
+    r"masterpiece|groundbreaking|a hit|the one|works|will work|nailed)\b"
+)
+_HEDGE = re.compile(r"^i\s+(?:\w+\s+)?(?:think|believe|feel|reckon|suspect)\b")
+# ...and about the person themselves: "I think I'm going to be late", "I feel like my
+# manager ignores me" is their situation, not a verdict on anything.
+_ABOUT_ONESELF = re.compile(
+    r"^i\s+(?:\w+\s+)?(?:think|believe|feel|reckon|suspect)(?:\s+(?:that|like))?\s+"
+    r"(?:i|i'm|i've|i'd|i'll|me|my|we|we're|we've|our)\b"
 )
 _OWNERSHIP = re.compile(
     r"(?:^|\s)(?:the\s+(?:first|second|third|fourth|last|other)\s+(?:one\s+)?is\s+mine"
@@ -230,6 +246,8 @@ def _kind(clause: str) -> str | None:
         if pattern.search(body):
             if kind == SOCIAL and not _VERDICT.search(body):
                 continue
+            if kind == STANCE and _ABOUT_ONESELF.match(body) and not _JUDGED.search(body):
+                continue
             if kind == CREDENTIAL and _TASK_CONTEXT.search(body):
                 continue
             return kind
@@ -272,6 +290,18 @@ _RESTATE: tuple[tuple[re.Pattern[str], str, str | None], ...] = (
         None,
     ),
     (re.compile(r"(?i)^(?:i'm|i\s+am)\s+leaning\s+towards?\s+"), "Another option is ", None),
+    # Who made it, said of anyone - so "I wrote this" and "a colleague wrote this" still
+    # become the same prompt.
+    (
+        re.compile(
+            r"(?i)^(?:i|someone|(?:a|my|our)\s+(?:colleague|coworker|co-worker|friend|"
+            r"teammate|team|student|client|manager|boss|report|intern))\s+(?:just\s+)?"
+            r"(?:wrote|drafted|made|built|designed|created|coded|composed|put\s+together)\s+"
+            r"(?:this|the)\s+"
+        ),
+        "This is the ",
+        None,
+    ),
     (
         re.compile(
             r"(?i)^(?:my|our)\s+[\w-]+(?:\s+[\w-]+)?\s+(?:thinks|says|wants)\s+i\s+should\s+"
@@ -369,8 +399,16 @@ def find(prompt: str, protected: list[Span]) -> list[Edit]:
                 skip_next = True
 
         if found and all(isinstance(f, str) for f in found):
-            # The whole sentence is self-presentation, none of it restated: it goes.
-            edits.append(Edit(sentence, "", sorted(set(found))[0], text))
+            # The whole sentence is self-presentation, none of it restated: it goes - but
+            # not the line breaks around it, which may be what separates two turns.
+            start, end = body.start, body.end
+            after = len(re.match(r"[ \t]*", prompt[end:]).group(0))
+            if end + after == len(prompt) or prompt[end + after] == "\n":
+                # The last sentence of its line: the space before it goes instead.
+                start -= len(re.search(r"[ \t]*$", prompt[:start]).group(0))
+            else:
+                end += after
+            edits.append(Edit(Span(start, end), "", sorted(set(found))[0], text))
             continue
 
         for ci, (clause, f) in enumerate(zip(clauses, found, strict=True)):

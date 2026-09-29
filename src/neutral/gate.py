@@ -115,8 +115,33 @@ _RULES: tuple[tuple[tuple[str, ...], str, re.Pattern[str]], ...] = (
     ),
     (
         (AGE,),
-        "the request is about the person's age",
-        re.compile(r"\b(?:too\s+old|too\s+young|at\s+my\s+age|age\s+limit|ageis\w*)\b", re.I),
+        "the request is about the person's age or stage of life",
+        re.compile(
+            r"\b(?:too\s+old|too\s+young|too\s+late|too\s+early|at\s+(?:my|his|her|their|your|"
+            r"this|that)\s+age|for\s+(?:my|his|her|their|your)\s+age|age\s+limit|ageis\w*|"
+            r"is\s+it\s+normal|normal\s+for|typical\s+for|by\s+now|late\s+start)\b",
+            re.I,
+        ),
+    ),
+    (
+        (AGE, GENDER, FAMILY),
+        "the request is about the body, fitness or health, where age and sex change the answer",
+        re.compile(
+            r"\b(?:workout|exercise|fitness|diet|nutrition|calories|protein|"
+            r"weight\s+(?:loss|gain)|lose\s+weight|gym|running\s+plan|marathon|sleep|"
+            r"skincare|hormones?)\b",
+            re.I,
+        ),
+    ),
+    (
+        (FAMILY, GENDER, AGE),
+        "the request is a personal message or gift for them, so who they are is the content",
+        re.compile(
+            r"\b(?:birthday|anniversary|wedding|toast|eulogy|gifts?|presents?|valentine'?s?|"
+            r"love\s+letter|condolence|sympathy\s+card|get\s+well|mother'?s\s+day|"
+            r"father'?s\s+day|(?:poem|song)\s+(?:for|to|about))\b",
+            re.I,
+        ),
     ),
     (
         (RELIGION, ORIGIN),
@@ -139,9 +164,50 @@ _RULES: tuple[tuple[tuple[str, ...], str, re.Pattern[str]], ...] = (
 )
 
 
+_QUANTIFIERS = {"all", "most", "many", "some", "few", "several", "both", "any", "no"}
+
+
+def about_a_group(prompt: str, finding: Finding) -> bool:
+    """Whether this description names a group the question is about, not a person in it.
+
+    "Are women worse at math than men?", "Why do Asian students score higher?", "Is it
+    true that immigrants commit more crime?" - removing the description changes the
+    question into another one ("Are people worse at math than people?"), so it stays.
+    A plural with nothing pointing at particular people counts; "my female engineers",
+    "two young Nigerian founders" and "the team is mostly men" are particular people, and
+    are handled like anyone else.
+    """
+    from neutral.detect import parse
+
+    doc = parse(prompt)
+    if doc is None:
+        return False
+    token = next((t for t in doc if t.idx == finding.span.start), None)
+    if token is None:
+        return False
+    noun = token if token.pos_ in ("NOUN", "PROPN") and token.dep_ != "compound" else token.head
+    if (
+        noun.tag_ not in ("NNS", "NNPS")
+        or noun.dep_ in ("attr", "appos", "conj")
+        and (noun.head.dep_ in ("attr", "appos"))
+    ):
+        return False
+    if noun.dep_ in ("attr", "appos"):
+        return False
+    for child in noun.children:
+        if child.dep_ in ("poss", "nummod"):
+            return False
+        if child.dep_ in ("det", "predet") and child.lower_ not in _QUANTIFIERS:
+            return False
+    return True
+
+
 def rules_verdicts(prompt: str, findings: list[Finding]) -> list[Verdict]:
     out = []
     for finding in findings:
+        if about_a_group(prompt, finding):
+            out.append(Verdict(True, "kept: the question is about a group, not a person in it"))
+            continue
         # A description never argues for keeping itself: "has a heavy accent on the phone"
         # must not match the rule that keeps accents when accents are the question.
         masked = (
@@ -165,6 +231,8 @@ _KIND_WORDS = {
     ORIGIN: "nationality, ethnicity or race",
     RELIGION: "religion",
     ORIENTATION: "sexual orientation or gender identity",
+    "appearance": "appearance",
+    "class": "education or class",
 }
 
 # Fixed, like the judge's rubric: changing it after seeing results is how a measurement
@@ -255,24 +323,32 @@ def identity_verdict(prompt: str, kind: str) -> Verdict:
     return Verdict(False, "replaced: nothing in the request depends on it")
 
 
+def _judgement_rule() -> re.Pattern[str]:
+    from neutral.mechanisms.neutral_judgement import DIMENSIONS
+
+    qualities = "|".join(sorted((re.escape(k) for k in DIMENSIONS), key=len, reverse=True))
+    return re.compile(
+        r"\b(?:rate|rating|review|critique|critic\w*|assess\w*|evaluat\w*|grade|score|judge|"
+        r"rank|feedback|opinion|what\s+do\s+you\s+think|thoughts\s+on|"
+        r"(?:is|are)\s+(?:it|this|that|these|those|my\s+[\w'-]+(?:\s+[\w'-]+){0,2}|"
+        r"the\s+[\w'-]+(?:\s+[\w'-]+){0,2})\s+(?:any\s+|really\s+|very\s+|too\s+)?"
+        rf"(?:{qualities}|worth\w*|better|a\s+good\s+idea|good\s+enough)|"
+        r"will\s+it\s+work|who(?:'s|\s+is)\s+right|which\s+(?:is|one|of)\b[^.?!]*\b(?:better|best)|"
+        r"valid|confirm|honest(?:ly)?|pros\s+and\s+cons|does\s+the\s+evidence|is\s+it\s+true|"
+        r"do\s+they|does\s+it|better\s+use|don't\s+you\s+(?:think|agree)|"
+        r"wouldn't\s+you\s+agree|am\s+i\s+(?:right|wrong)|"
+        r"(?:tell\s+me|let\s+me\s+know)\s+(?:honestly\s+)?(?:if|whether)|"
+        r"(?:if|whether)\b[^.?!]{0,60}\b(?:is|are|was|will)\b[^.?!]{0,30}\b(?:good|funny|catchy|"
+        r"strong|right|correct|valid|fair|work|original|any\s+good|efficient|clear))\b",
+        re.I,
+    )
+
+
 # A request for a judgement: a rating, a verdict, feedback, a choice between options, or
 # whether a claim is true. Where it is found, what the person asking says about their own
 # stake is taken out (mechanisms/self_presentation.py); where it is not - "I'm nervous,
 # how do I calm down?" - that is the question, and it stays.
-JUDGEMENT_RULE = re.compile(
-    r"\b(?:rate|rating|review|critique|critic\w*|assess\w*|evaluat\w*|grade|score|judge|"
-    r"rank|feedback|opinion|what\s+do\s+you\s+think|thoughts\s+on|"
-    r"is\s+(?:it|this|that|my\s+\w+(?:\s+\w+)?|the\s+\w+)\s+(?:any\s+)?(?:good|ok|okay|fine|"
-    r"strong|right|correct|valid|fair|funny|catchy|reasonable|realistic|smart|original|"
-    r"worth|ready|better|a\s+good\s+idea|good\s+enough)|will\s+it\s+work|who(?:'s|\s+is)\s+right|"
-    r"which\s+(?:is|one|of)\b.*\b(?:better|best)|valid|confirm|honest(?:ly)?|pros\s+and\s+cons|"
-    r"does\s+the\s+evidence|is\s+it\s+true|do\s+they|does\s+it|better\s+use|"
-    r"don't\s+you\s+(?:think|agree)|wouldn't\s+you\s+agree|am\s+i\s+(?:right|wrong)|"
-    r"(?:tell\s+me|let\s+me\s+know)\s+(?:honestly\s+)?(?:if|whether)|"
-    r"(?:if|whether)\b[^.?!]{0,60}\b(?:is|are|was|will)\b[^.?!]{0,30}\b(?:good|funny|catchy|"
-    r"strong|right|correct|valid|fair|work|original|any\s+good))\b",
-    re.I,
-)
+JUDGEMENT_RULE = _judgement_rule()
 
 
 def asks_for_judgement(prompt: str) -> Verdict:

@@ -121,6 +121,11 @@ _MADE_BY_ME = re.compile(
 )
 
 
+_MINE_OR_THEIRS = re.compile(
+    r"\b(?:my|our)\s+([\w-]+)\s+or\s+(?:my|our|his|her|their|a|the)\s+[\w-]+'s\b", re.I
+)
+
+
 def _dimensions(verdict: str) -> list[str]:
     words = re.sub(_INTENSIFIERS, "", verdict.lower())
     out: list[str] = []
@@ -150,7 +155,7 @@ def _owner_free(prompt: str, span: Span) -> tuple[Span, str]:
 
 def _sentences(prompt: str) -> list[Span]:
     spans, start = [], 0
-    for m in re.finditer(r"[.!?]+(?=\s|$)", prompt):
+    for m in re.finditer(r"[.!?]+(?=\s|$)|\n{2,}", prompt):
         if prompt[start : m.end()].strip():
             lead = len(prompt[start : m.end()]) - len(prompt[start : m.end()].lstrip())
             spans.append(Span(start + lead, m.end()))
@@ -188,7 +193,11 @@ def find(prompt: str, protected: list[Span]) -> list[Edit]:
         nxt = sentences[i + 1] if i + 1 < len(sentences) else None
         nxt_text = prompt[nxt.start : nxt.end] if nxt else ""
         # Leading words that ask for candour stay: "Be honest, is this chorus catchy?"
-        lead = re.match(r"(?i)(?:be\s+(?:honest|brutal|blunt)|honestly|seriously)[,:]?\s+", text)
+        lead = re.match(
+            r"(?i)(?:please\s+)?(?:be\s+(?:\w+\s+)?(?:honest|brutal|blunt|frank)|honestly|"
+            r"seriously|frankly)[,:.]?\s+",
+            text,
+        )
         at = s.start + (lead.end() if lead else 0)
         body = prompt[at : s.end]
 
@@ -259,7 +268,12 @@ def find(prompt: str, protected: list[Span]) -> list[Edit]:
             rf"\s+({_VERDICT})(\s+enough)?((?:\s+(?:for|as|to)\s+[^?]+)?)\?$",
             body,
         )
-        if m:
+        if m and not (
+            m.group(1).lower() in ("this", "that", "these", "those")
+            and not _dimensions(m.group(2))
+            and not m.group(3)
+        ):
+            # ("Is that ok?" has nothing to assess and no object to name: left as asked.)
             obj = Span(at + m.start(1), at + m.end(1))
             dims = _dimensions(m.group(2))
             rest = m.group(4)
@@ -315,6 +329,13 @@ def unowned(prompt: str, protected: list[Span], taken: list[Span]) -> list[Edit]
         return any(w.start <= pos < w.end for w in protected)
 
     edits: list[Edit] = []
+    # "my design or my coworker's": whose is whose, gone from both.
+    for m in _MINE_OR_THEIRS.finditer(prompt):
+        span = Span(m.start(), m.end())
+        if in_work(span.start) or any(span.start < t.end and span.end > t.start for t in taken):
+            continue
+        edits.append(Edit(span, f"the first {m.group(1)} or the second", KIND, m.group(0)))
+        taken = [*taken, span]
     for m in _OWNED.finditer(prompt):
         span = Span(m.start(), m.end())
         if in_work(span.start) or any(span.start < t.end and span.end > t.start for t in taken):

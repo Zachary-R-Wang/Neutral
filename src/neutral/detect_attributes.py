@@ -246,6 +246,30 @@ _LIST_FAMILY = re.compile(
     r"(?<=[:,]\s)(?:married|divorced|widowed|separated|single|childless|"
     r"(?:no|one|two|three|four|five|six|\d)\s+(?:kids|children|sons|daughters))(?:,\s+)(?=[a-z0-9])",
 )
+# A form pasted in: "Age: 34", "Gender: Female", "Nationality: Nigerian". The whole line
+# goes, newline and all, when the task does not need it.
+_FIELD_KINDS = {
+    "age": AGE,
+    "date of birth": AGE,
+    "dob": AGE,
+    "gender": GENDER,
+    "sex": GENDER,
+    "pronouns": GENDER,
+    "nationality": ORIGIN,
+    "ethnicity": ORIGIN,
+    "race": ORIGIN,
+    "citizenship": ORIGIN,
+    "country of origin": ORIGIN,
+    "place of birth": ORIGIN,
+    "religion": RELIGION,
+    "marital status": FAMILY,
+    "children": FAMILY,
+}
+_FORM_FIELD = re.compile(
+    r"^[ \t]*(" + "|".join(sorted(map(re.escape, _FIELD_KINDS), key=len, reverse=True)) + r")"
+    r"[ \t]*:[ \t]*[^\n]+(?:\n|$)",
+    re.I | re.M,
+)
 # A parent counted: "a mother of two" is a description of family, not of work.
 _PARENT_OF = re.compile(
     r"\b(?:mother|father|mom|mum|dad|parent)\s+of\s+(?:one|two|three|four|five|six|\d+)\b", re.I
@@ -476,6 +500,8 @@ def detect_attributes(prompt: str, claimed: list[Span] | None = None) -> list[Fi
         add(match.start(), match.end(), FAMILY)
     for match in _PARENT_OF.finditer(prompt):
         add(match.start(), match.end(), FAMILY)
+    for match in _FORM_FIELD.finditer(prompt):
+        add(match.start(), match.end(), _FIELD_KINDS[match.group(1).lower()])
 
     nlp = _model()
     if nlp is None:

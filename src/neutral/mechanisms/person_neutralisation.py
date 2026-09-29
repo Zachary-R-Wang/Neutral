@@ -263,6 +263,27 @@ def _agreeing(subject) -> list:
     return found
 
 
+# Verbs that read naturally without their "me": "Give 5 ideas", "Write a plan", "Find a
+# course". "Tell me what to say" does not, so "tell" keeps a label instead.
+_DROPPABLE = {
+    "give",
+    "show",
+    "send",
+    "find",
+    "get",
+    "make",
+    "write",
+    "draft",
+    "create",
+    "suggest",
+    "recommend",
+    "list",
+    "build",
+    "plan",
+    "help",
+}
+
+
 def _asks_the_assistant(me) -> bool:
     """Whether this "me" is only the receiver of a request to the assistant.
 
@@ -311,6 +332,15 @@ def _first_person_refs(
             )
         )
 
+    # Whether the person asking is labelled anywhere other than a "give me": then a "give
+    # me" would give the label away.
+    labelled_elsewhere = any(
+        t.lower_ in ("i", "my", "mine", "myself")
+        or (t.lower_ == "me" and not _asks_the_assistant(t))
+        for t in doc
+        if t.tag_ in ("PRP", "PRP$") and not _inside(t.idx, protected)
+    )
+
     for token in doc:
         low = token.lower_
         if low not in ("i", "me", "my", "mine", "myself") or token.tag_ not in ("PRP", "PRP$"):
@@ -324,7 +354,18 @@ def _first_person_refs(
             add(start, end, _cased(possessive, capital), "first_person")
         elif low == "me":
             if _asks_the_assistant(token):
-                continue
+                if not labelled_elsewhere:
+                    continue
+                # Anywhere else the person asking is "Person A", "Give me" would say who
+                # Person A is. Where the verb reads without it, "me" goes; otherwise it
+                # takes the label like every other "me".
+                verb = token.head
+                if token.dep_ == "nsubj" and verb.dep_ in ("ccomp", "xcomp"):
+                    verb = verb.head  # "help me write": the request is "help"
+                if verb.lemma_ in _DROPPABLE and token.dep_ in ("dative", "dobj", "nsubj"):
+                    gap = len(re.match(r"\s*", prompt[end:]).group(0))
+                    add(start, end + gap, "", "first_person")
+                    continue
             add(start, end, _cased(referent, capital), "first_person")
         elif low == "myself":
             if token.dep_ in ("dobj", "pobj", "dative", "attr"):

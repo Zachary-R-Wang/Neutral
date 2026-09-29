@@ -37,10 +37,11 @@ from neutral.invariants import InvariantViolation
 from neutral.policy import safety_hold
 from neutral.restore import restore
 from neutral.rewrite import rewrite
+from neutral.work import TURN_SEPARATOR
 
 # Chosen to contain no letters, so name detection cannot see a name across the join and no
 # substitution can ever land on it.
-SEPARATOR = "\n\n@@@@\n\n"
+SEPARATOR = TURN_SEPARATOR
 
 
 @dataclass
@@ -64,6 +65,9 @@ class Turn:
     # Neutral did to their prompt (CLAUDE.md §5, Phase 5). In memory only, like `asked`.
     sent: str = ""
     changes: tuple[TransformRecord, ...] = ()
+    # What Neutral found and deliberately left, with why: ("67-year-old", "the request is
+    # about the law"). Without it, a description the task needed looked like one missed.
+    kept: tuple[tuple[str, str], ...] = ()
     untouched: bool = False
     note: str = ""
     failed: bool = False
@@ -111,6 +115,22 @@ def _rewrite_all(
     return parts, done.identity_map, done.pronoun_style, newest, done.asker
 
 
+def _kept(prompt: str) -> tuple[tuple[str, str], ...]:
+    """What the relevance gate found in this prompt and chose to leave, and why."""
+    try:
+        decisions = rewrite(prompt).decisions
+    except Exception:  # noqa: BLE001 - an explanation is not worth failing a turn over
+        return ()
+    out: list[tuple[str, str]] = []
+    for d in decisions:
+        if d.transform_allowed or d.safety_hold:
+            continue
+        why = d.reason.split("kept: ", 1)[-1].rstrip(".")
+        if (d.detected, why) not in out:
+            out.append((d.detected, why))
+    return tuple(out)
+
+
 def ask(conversation: Conversation, prompt: str, adapter) -> Turn:
     """Add one turn. Two model calls: the prompt as written, and the rewritten one."""
     turn = Turn(asked=prompt)
@@ -121,6 +141,7 @@ def ask(conversation: Conversation, prompt: str, adapter) -> Turn:
         history = [
             part
             for past in conversation.turns
+            if past.answer
             for part in (("user", past.asked), ("assistant", past.answer))
         ]
         reply = adapter.complete(prompt, history=history)
@@ -154,18 +175,42 @@ def ask(conversation: Conversation, prompt: str, adapter) -> Turn:
             "was sent unchanged."
         )
 
+    turn.kept = _kept(prompt)
+
+    # Everything in the message was about the person asking - "I spent three weeks on it
+    # and I think it's the best thing I've written" - so nothing is left to send. An empty
+    # message is refused by providers, and sending the original would put back exactly
+    # what was removed. Say so instead, and send nothing.
+    if not rewritten[-1].strip():
+        turn.sent = ""
+        turn.changes = changes
+        turn.note = (
+            "Everything in this message was about you rather than the work - how you feel "
+            "about it, what you put into it, what others thought - so Neutral removed it and "
+            "there was nothing left to send. Ask what you want to know about the work and "
+            "it will go to the model."
+        )
+        conversation.turns.append(turn)
+        return turn
+
     # Nothing was found to change, so the rewritten prompt IS the prompt. Asking the
     # model the same question a second time would cost another call and return a
     # different answer - models do not repeat themselves - and the interface would show
     # two answers side by side as though Neutral had done something. It did not.
     if rewritten[-1] == prompt and not changes:
+        if turn.kept:
+            left = "; ".join(f"\u201c{text}\u201d, because {why}" for text, why in turn.kept)
+            return send_unchanged(f"Sent as written. Neutral found and deliberately kept {left}.")
         return send_unchanged(
             "Nothing in this needed changing, so it went to the model exactly as you wrote it."
         )
 
+    # A turn with no reply - one that failed, or one with nothing left to send - is left
+    # out: an empty message in the history makes providers refuse every later turn too.
     history = [
         part
         for past, past_rewritten in zip(conversation.turns, rewritten[:-1], strict=False)
+        if (past.neutral_answer or past.answer) and past_rewritten.strip()
         for part in (
             ("user", past_rewritten),
             ("assistant", past.neutral_answer or past.answer),

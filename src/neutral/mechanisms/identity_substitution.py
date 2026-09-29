@@ -358,6 +358,26 @@ def _attribute_edits(prompt: str, findings: list[Finding], allowed: set[int]) ->
                 last = max(t.idx + len(t.text) for t in token.subtree)
                 join = re.match(r"\s*,?\s*(?:and\s+|but\s+)?", prompt[last:])
                 rest = prompt[last + join.end() :]
+                opens = not prompt[:clause_start].strip() or re.search(
+                    r"[.!?]\s*$", prompt[:clause_start]
+                )
+                stop = re.match(r"\s*[.!?]+\s*", prompt[last:])
+                if opens and stop and prompt[last + stop.end() :].strip():
+                    # "I am a woman. Write me a plan." - a sentence that was nothing but the
+                    # description goes whole, rather than leaving "Person A is a person."
+                    edits.append(
+                        _Edit(
+                            Span(clause_start, last + stop.end()),
+                            "",
+                            prompt[clause_start:last],
+                            finding.kind,
+                            reason,
+                        )
+                    )
+                    for f in described:
+                        if clause_start <= f.span.start < last:
+                            handled.add(id(f))
+                    continue
                 if rest and not re.match(r"[.!?]", rest):
                     edits.append(
                         _Edit(

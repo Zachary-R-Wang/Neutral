@@ -21,6 +21,7 @@ from __future__ import annotations
 import os
 import re
 from dataclasses import dataclass
+from functools import lru_cache
 
 from pydantic import BaseModel, Field
 
@@ -258,6 +259,16 @@ def active_detector() -> str:
     reports it under two names. That happened, and it inverted the conclusion.
     """
     return ner_model_name() if _model() is not None else "rules-only"
+
+
+@lru_cache(maxsize=64)
+def parse(text: str):
+    """The parsed prompt, shared by every stage that needs one. None without a parser.
+
+    Each mechanism used to parse the same prompt again - a dozen times for some prompts.
+    Nothing modifies a parsed document, so one parse per text is safe to share."""
+    nlp = _model()
+    return nlp(text) if nlp is not None else None
 
 
 def _model():

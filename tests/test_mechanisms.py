@@ -123,13 +123,15 @@ class TestBothFramingsEndUpIdentical:
 
 
 class TestPuttingTheAnswerBack:
+    # Not a request for a verdict: there, since 2026-09-28, the authorship line itself is
+    # restated ("This is the memo") and no "the author" is left to put back.
     def test_first_person_framing_restores_to_you(self):
-        done = rewrite("I wrote this memo. Is it any good?")
+        done = rewrite("I wrote this memo. Summarise it.")
         assert done.restore_map["the author"] == "you"
         assert done.restore_map["the author's"] == "your"
 
     def test_a_stand_in_author_restores_to_your_colleague(self):
-        done = rewrite("A colleague wrote this memo. Is it any good?")
+        done = rewrite("A colleague wrote this memo. Summarise it.")
         assert done.restore_map["the author"] == "your colleague"
 
     def test_both_cases_are_registered_so_a_sentence_start_maps_back(self):
@@ -243,9 +245,9 @@ class TestTheDetectorIsNotEquallyGoodAtEveryName:
 class TestTheMechanismsCompose:
     def test_names_and_framing_are_both_handled_in_one_prompt(self):
         out = _text("I wrote this memo and Priya Raman reviewed it. Is it any good?")
-        assert "The author wrote" in out
-        assert "Person A reviewed" in out
-        assert "Priya" not in out
+        assert out == "This is the memo and Person A reviewed it. Evaluate its quality."
+        out = _text("I wrote this memo and Priya Raman reviewed it. Summarise it.")
+        assert "The author wrote" in out and "Person A reviewed" in out
 
     def test_every_character_sent_is_traceable_to_the_original(self):
         """S1, with all three running rather than one."""
@@ -944,3 +946,93 @@ class TestALearnedDetectorIsKeptOnALeash:
 
         monkeypatch.setenv("NEUTRAL_LEARNED", "off")
         assert learned.detector() is None
+
+
+# ---------------------------------------------------------------------------
+# Found in the final review, 2026-09-28
+# ---------------------------------------------------------------------------
+
+
+class TestAQuestionAboutAGroupKeepsTheGroup:
+    """ "Are women worse at math than men?" was sent as "Are people worse at math than
+    people?" - a different question. A plural with nothing pointing at particular people
+    names the group the question is about."""
+
+    @pytest.mark.parametrize(
+        "asked",
+        [
+            "Are women worse at math than men?",
+            "Why do Asian students score higher on standardized tests?",
+            "Is it true that immigrants commit more crime?",
+            "What challenges do Black women face in tech?",
+        ],
+    )
+    def test_it_is_sent_as_asked(self, asked):
+        assert _text(asked) == asked
+
+    def test_a_leading_question_about_a_group_is_still_made_neutral(self):
+        out = _text("Don't you think men are better leaders?")
+        assert out == "Evaluate whether men are better or worse leaders."
+
+    def test_particular_people_are_still_neutralised(self):
+        out = _text("Evaluate this business plan from two young Nigerian founders.")
+        assert "Nigerian" not in out and "young" not in out
+
+
+class TestWhatTheQuestionTurnsOnStays:
+    @pytest.mark.parametrize(
+        ("asked", "kept"),
+        [
+            ("I'm 45 and want to learn piano. Is it too late?", "45"),
+            ("Is it normal for my 30 year old son to still live at home?", "30 year old"),
+            ("I am a woman. Write me a workout plan.", "woman"),
+            ("Help me write a birthday message for my mom.", "mom"),
+        ],
+    )
+    def test_it_is_kept(self, asked, kept):
+        assert kept in _text(asked)
+
+    def test_a_professional_letter_is_not_a_personal_one(self):
+        out = _text(
+            "Write a reference letter for my former intern, a 22-year-old gay man who "
+            "studied economics."
+        )
+        assert "22-year-old" not in out and "gay" not in out
+
+    def test_a_situation_introduced_by_i_think_is_not_a_verdict(self):
+        out = _text("I think I'm going to be late. Is that ok?")
+        assert "going to be late" in out and "Is that ok?" in out
+
+
+class TestMoreShapesOfTheSameThing:
+    @pytest.mark.parametrize(
+        ("asked", "sent"),
+        [
+            (
+                "Is my resume good? I've been told it's great by three recruiters.",
+                "Evaluate the resume.",
+            ),
+            (
+                "Which is better, my design or my coworker's? I think mine is cleaner.",
+                "Which is better, the first design or the second?",
+            ),
+            (
+                "I wrote this function and I'm proud of it. Is it efficient? def f(x): return x*2",
+                "This is the function. Evaluate its efficiency. def f(x): return x*2",
+            ),
+            (
+                "I'm a teacher. Give me 5 ideas for a lesson on fractions.",
+                "Person A is a teacher. Give 5 ideas for a lesson on fractions.",
+            ),
+            (
+                "Evaluate this candidate:\nName: Jamal Washington\nAge: 34\nExperience: 8 years",
+                "Evaluate this candidate:\nName: Person A\nExperience: 8 years",
+            ),
+        ],
+    )
+    def test_it_comes_out_as_expected(self, asked, sent):
+        assert _text(asked) == sent
+
+    def test_please_be_brutally_honest_is_a_lead_in(self):
+        out = _text("Please be brutally honest: is my novel's first line any good?")
+        assert out == "Please be brutally honest: evaluate the novel's first line."

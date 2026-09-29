@@ -40,9 +40,16 @@ _LABELLED = re.compile(
 )
 
 
+# What neutral.conversation puts between turns, so that one rewrite covers a whole
+# conversation with consistent placeholders. No edit may touch it, or the turns cannot
+# be told apart again and the whole conversation falls back to being sent unchanged.
+TURN_SEPARATOR = "\n\n@@@@\n\n"
+
+
 def work_spans(prompt: str) -> list[Span]:
     """Every part of the prompt that is the work itself, sorted."""
-    spans = [Span(m.start(), m.end()) for m in _DOUBLE.finditer(prompt)]
+    spans = [Span(m.start(), m.end()) for m in re.finditer(re.escape(TURN_SEPARATOR), prompt)]
+    spans += [Span(m.start(), m.end()) for m in _DOUBLE.finditer(prompt)]
     spans += [Span(m.start(), m.end()) for m in _SINGLE.finditer(prompt)]
     spans += [Span(m.start(), m.end()) for m in _INDENTED.finditer(prompt)]
     spans += [Span(m.start(), m.end()) for m in _FENCED.finditer(prompt)]

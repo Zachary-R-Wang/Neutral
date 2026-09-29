@@ -574,3 +574,52 @@ class TestTheMark:
 
         assert INK == "#586a60"
         assert INK in mark_svg()
+
+
+class TestConversationsSurviveWhatTheMechanismsRemove:
+    """Found in the final review: a message that was all self-presentation was sent to the
+    model as an empty string, and the removal took the separator between turns with it,
+    so the next turn fell back to being sent unchanged."""
+
+    class _Recording:
+        model = "recording"
+
+        def __init__(self, fail_first=False):
+            self.sent, self.histories, self.fail_first = [], [], fail_first
+
+        def complete(self, prompt, *, system=None, history=None):
+            self.sent.append(prompt)
+            self.histories.append(list(history or []))
+            if self.fail_first and len(self.sent) == 1:
+                return Completion(text="", model=self.model, error="boom", error_kind="unreachable")
+            return Completion(text="Noted.", model=self.model, stop_reason="end_turn")
+
+    def test_nothing_is_sent_when_nothing_is_left(self):
+        adapter = self._Recording()
+        conversation = Conversation()
+        ask(conversation, "Rate my essay out of 10", adapter)
+        turn = ask(
+            conversation,
+            "I spent three weeks on it and I think it's the best thing I've written",
+            adapter,
+        )
+        assert len(adapter.sent) == 1, "an empty message went to the model"
+        assert "nothing left to send" in turn.note
+
+    def test_the_next_turn_is_still_neutralised(self):
+        adapter = self._Recording()
+        conversation = Conversation()
+        ask(conversation, "Rate my essay out of 10", adapter)
+        ask(conversation, "I spent three weeks on it and I think it's the best thing", adapter)
+        turn = ask(conversation, "Is it good enough for a magazine?", adapter)
+        assert not turn.untouched
+        assert adapter.sent[-1] == "Evaluate its suitability for a magazine."
+
+    def test_a_failed_turn_does_not_poison_the_history(self):
+        """Its reply is empty, and an empty message in the history makes providers refuse
+        every later turn."""
+        adapter = self._Recording(fail_first=True)
+        conversation = Conversation()
+        ask(conversation, "Assess Emily Carter.", adapter)
+        ask(conversation, "Assess Ravi Menon.", adapter)
+        assert all(content for _, content in adapter.histories[-1])
